@@ -1,0 +1,56 @@
+/* ---------- banner offline ---------- */
+
+.banner-offline {
+  position: fixed;
+  bottom: var(--sp-4);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  box-shadow: var(--shadow-2);
+  padding: var(--sp-2) var(--sp-4);
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  z-index: 90;
+  white-space: nowrap;
+}
+
+.banner-offline-ponto {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--danger);
+  flex-shrink: 0;
+}
+
+.toast {
+  position: fixed;
+  top: var(--sp-4);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  max-width: 480px;
+  box-shadow: var(--shadow-2);
+  border-radius: var(--r-m);
+  background: var(--surface);
+}
+
+.leitor-erro {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: var(--sp-6);
+}
+
+.leitor-erro-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+  text-align: center;
+  max-width: 380px;
+}

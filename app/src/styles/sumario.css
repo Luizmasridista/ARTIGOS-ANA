@@ -1,0 +1,48 @@
+/* ---------- sumário ---------- */
+
+.sumario-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sumario-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  width: 100%;
+  text-align: left;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-m);
+  padding: var(--sp-2) var(--sp-3);
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.sumario-item:hover {
+  border-color: var(--accent);
+  background: var(--surface);
+}
+
+.sumario-titulo {
+  flex: 1;
+  font-size: var(--fs-sm);
+  font-weight: 550;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sumario-pagina {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-soft);
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}

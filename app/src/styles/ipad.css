@@ -1,0 +1,135 @@
+/* ---------- iPad nativo (detecção via data-device="ipad") ---------- */
+/* Regras gerais de viewport/touch/header. Painel específico em painel-ipad.css */
+
+html[data-device="ipad"] {
+  /* evita zoom duplo toque e melhora toque */
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+}
+
+html[data-device="ipad"] body {
+  /* usa dvh para barra do Safari não quebrar, e safe-area para notch/home */
+  min-height: 100dvh;
+  min-height: 100vh;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+
+html[data-device="ipad"] .app {
+  height: 100dvh;
+  height: 100vh;
+  min-height: 100dvh;
+  min-height: 100vh;
+}
+
+@supports (height: 100dvh) {
+  html[data-device="ipad"] body {
+    min-height: 100dvh;
+  }
+  html[data-device="ipad"] .app {
+    height: 100dvh;
+    min-height: 100dvh;
+  }
+}
+
+html[data-device="ipad"] .header {
+  padding-top: env(safe-area-inset-top);
+  height: calc(48px + env(safe-area-inset-top));
+  /* no iPad web, sem controles de janela, header mais alto para toque */
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+
+html[data-device="ipad"] .janela-controles {
+  display: none !important;
+}
+
+html[data-device="ipad"] .btn,
+html[data-device="ipad"] button {
+  min-height: 44px; /* HIG Apple */
+  min-width: 44px;
+}
+
+html[data-device="ipad"] .chip-tag,
+html[data-device="ipad"] .chip-cor,
+html[data-device="ipad"] .chip-tag-remove,
+html[data-device="ipad"] .composer-cor,
+html[data-device="ipad"] .popover-cor,
+html[data-device="ipad"] .tooltip-cor,
+html[data-device="ipad"] .grok-banner .btn {
+  min-height: auto;
+  min-width: auto;
+}
+
+html[data-device="ipad"] .btn-icon {
+  padding: 8px;
+}
+
+html[data-device="ipad"] .leitor-paginas {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  /* pan-y: vertical scroll nativo, horizontal/diagonal mantém marcação */
+  touch-action: pan-y;
+  /* iPad 60fps: force compositor layer, avoid layout thrash on scroll */
+  will-change: scroll-position;
+  transform: translateZ(0);
+  contain: layout style;
+}
+
+html[data-device="ipad"] .paginas-coluna {
+  transform: translateZ(0);
+  will-change: transform;
+  contain: layout;
+}
+
+html[data-device="ipad"] .pagina {
+  /* iPad: per-page intrinsic size tuned for viewport width.
+     Portrait 768 -> ~1086px tall, landscape 1024 -> ~1448px.
+     Use auto 1200px average to avoid scroll jump. */
+  contain-intrinsic-size: auto 1200px;
+  /* reduce paint cost; browser skips offscreen pages */
+  content-visibility: auto;
+  contain: layout style paint;
+}
+
+html[data-device="ipad"] .pagina-img {
+  /* ensure offscreen images not decoded: CSS content-visibility + loading lazy */
+  content-visibility: auto;
+  /* avoid accidental high memory decode before visibility */
+  contain: strict;
+}
+
+/* iPad landscape 1024x768 vs portrait 768x1024: adjust intrinsic to reduce scrollbar jitter */
+@media (orientation: portrait) {
+  html[data-device="ipad"] .pagina {
+    contain-intrinsic-size: auto 1100px;
+  }
+}
+@media (orientation: landscape) {
+  html[data-device="ipad"] .pagina {
+    contain-intrinsic-size: auto 1400px;
+  }
+}
+
+/* painel iPad específico movido para painel-ipad.css — manter compat */
+html[data-device="ipad"] .biblioteca {
+  padding-bottom: calc(var(--sp-6) + env(safe-area-inset-bottom));
+}
+
+/* iPad sem hover: mostra ação do card sempre */
+@media (hover: none) {
+  html[data-device="ipad"] .artigo-card-acao {
+    opacity: 1;
+  }
+}
+
+/* evita seleção acidental no iPad ao tocar; pan-y permite scroll vertical */
+html[data-device="ipad"] .pagina-camada {
+  touch-action: pan-y;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}

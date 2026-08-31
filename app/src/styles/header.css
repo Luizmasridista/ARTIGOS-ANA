@@ -1,0 +1,89 @@
+/* ---------- header ---------- */
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  height: 48px;
+  padding: 0 var(--sp-4);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.header button {
+  -webkit-app-region: no-drag;
+}
+
+.janela-controles {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  -webkit-app-region: no-drag;
+}
+
+.janela-btn {
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+
+.janela-btn:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.janela-fechar {
+  background: #E95420;
+  color: #ffffff;
+}
+
+.janela-fechar:hover {
+  background: #C9441B;
+}
+
+.janela-minimizar,
+.janela-maximizar {
+  background: #D9D9D3;
+  color: #5f5f5a;
+}
+
+.janela-minimizar:hover,
+.janela-maximizar:hover {
+  background: #C2C2BB;
+  color: #3d3d39;
+}
+
+[data-theme="dark"] .janela-minimizar,
+[data-theme="dark"] .janela-maximizar {
+  background: #4a4a46;
+  color: #d6d6d1;
+}
+
+[data-theme="dark"] .janela-minimizar:hover,
+[data-theme="dark"] .janela-maximizar:hover {
+  background: #5c5c57;
+  color: #ffffff;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-weight: 650;
+  font-size: var(--fs-lg);
+  letter-spacing: -0.01em;
+  user-select: none;
+}
+
+.header-spacer {
+  flex: 1;
+}

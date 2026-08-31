@@ -1,0 +1,25 @@
+/* Artigos Ana — CSS modularizado (single responsibility) */
+/* Cada módulo tem responsabilidade única; agentes devem manter. Ver src/styles/README.md */
+
+@import "./styles/tokens.css";
+@import "./styles/base.css";
+@import "./styles/buttons.css";
+@import "./styles/header.css";
+@import "./styles/biblioteca.css";
+@import "./styles/leitor.css";
+@import "./styles/tooltip.css";
+@import "./styles/popover.css";
+@import "./styles/painel.css";
+@import "./styles/painel-ipad.css";
+@import "./styles/citacoes.css";
+@import "./styles/dialog.css";
+@import "./styles/banner.css";
+@import "./styles/busca.css";
+@import "./styles/leitor-busca.css";
+@import "./styles/filtros.css";
+@import "./styles/sumario.css";
+@import "./styles/home.css";
+@import "./styles/responsive.css";
+@import "./styles/ipad.css";
+@import "./styles/ilha-nota.css";
+@import "./styles/grok.css";

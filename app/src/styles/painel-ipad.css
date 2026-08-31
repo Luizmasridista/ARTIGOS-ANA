@@ -1,0 +1,83 @@
+/* ---------- painel iPad — módulo dedicado (data-device="ipad") ---------- */
+/* Single responsibility: apenas ergonomia do painel no iPad web (768/1024) */
+/* Usa 100dvh + env(safe-area-inset-*) para não cortar conteúdo atrás do notch/home */
+
+html[data-device="ipad"] .painel {
+  /* iPad: header é 48 + safe-top, então painel começa após header */
+  top: calc(48px + env(safe-area-inset-top));
+  bottom: auto;
+  /* altura real visível: dvh menos header e safe-areas */
+  height: calc(100dvh - 48px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  max-height: calc(100dvh - 48px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  /* fallback para browsers sem dvh */
+  height: calc(100vh - 48px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  max-height: calc(100vh - 48px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  /* re-aplica dvh por cima se suportado */
+}
+
+@supports (height: 100dvh) {
+  html[data-device="ipad"] .painel {
+    height: calc(100dvh - 48px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    max-height: calc(100dvh - 48px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+}
+
+html[data-device="ipad"] .painel-conteudo {
+  /* evita clipping por flex: min-height 0 já no painel.css; reforça iPad */
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  /* padding extra bottom para não colar no home indicator */
+  padding-bottom: calc(var(--sp-3) + env(safe-area-inset-bottom));
+}
+
+html[data-device="ipad"] .painel-tabs {
+  min-height: 44px;
+  flex-shrink: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+html[data-device="ipad"] .painel-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+html[data-device="ipad"] .painel-tab {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 10px 14px;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+html[data-device="ipad"] .painel-filtros {
+  padding-bottom: calc(var(--sp-3) + 2px);
+}
+
+html[data-device="ipad"] .painel-backdrop {
+  top: calc(48px + env(safe-area-inset-top));
+  bottom: 0;
+  /* área safe inferior coberta */
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* portrait 768x1024: painel não pode esconder leitor por completo */
+@media (max-width: 768px) {
+  html[data-device="ipad"] .painel {
+    width: min(85vw, 360px) !important;
+    max-width: min(85vw, 360px) !important;
+  }
+}
+
+/* landscape 1024x768: mantém 360 máximo, backdrop cobre leitor */
+@media (min-width: 769px) and (max-width: 1024px) {
+  html[data-device="ipad"] .painel {
+    width: 360px;
+    max-width: min(42vw, 380px);
+  }
+}

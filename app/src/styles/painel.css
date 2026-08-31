@@ -1,0 +1,403 @@
+/* ---------- painel lateral ---------- */
+
+.painel {
+  width: 320px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--border);
+  background: var(--surface);
+  min-height: 0;
+  position: relative;
+  transition: transform 0.18s ease;
+}
+
+.painel-resizer {
+  position: absolute;
+  left: -4px;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: col-resize;
+  z-index: 5;
+}
+
+.nota-card-numero {
+  min-width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.nota-card.focada {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  background: var(--accent-soft);
+}
+
+.nota-badge {
+  position: absolute;
+  z-index: 25;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--surface);
+  cursor: pointer;
+  pointer-events: auto;
+  box-shadow: var(--shadow-1);
+  user-select: none;
+  transition: transform 0.1s ease;
+}
+
+.nota-badge:hover {
+  transform: scale(1.15);
+}
+
+.painel-tabs {
+  display: flex;
+  gap: var(--sp-1);
+  padding: var(--sp-2) var(--sp-3) 0;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  min-height: 44px;
+  align-items: stretch;
+}
+
+.painel-tab {
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+  font-weight: 550;
+  padding: var(--sp-2) var(--sp-3);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  min-height: 44px;
+  min-width: 44px;
+  justify-content: center;
+}
+
+.painel-tab:hover {
+  color: var(--text);
+}
+
+.painel-tab.ativa {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.painel-conteudo {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: var(--sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+}
+
+.nota-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-m);
+  padding: var(--sp-3) var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.nota-card-cabecalho {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.nota-card-pagina {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  background: var(--accent-soft);
+  color: var(--accent);
+  padding: 2px 8px;
+  border-radius: 999px;
+  cursor: pointer;
+  border: none;
+}
+
+.nota-card-data {
+  color: var(--muted);
+  font-size: var(--fs-xs);
+  margin-left: auto;
+}
+
+.nota-card-texto {
+  margin: 0;
+  font-size: var(--fs-sm);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.nota-card-acoes {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* --- nota-card minimalista (substitui o genérico) --- */
+.nota-card--minimal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-m);
+  padding: 12px 14px;
+  gap: 8px;
+  box-shadow: none;
+  transition: border-color 0.12s ease;
+}
+
+.nota-card--minimal:hover {
+  border-color: var(--border-strong);
+}
+
+.nota-card-cabecalho-minimal {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.nota-card-ir {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid transparent;
+  padding: 3px 9px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.nota-card-ir:hover {
+  background: rgba(233, 84, 32, 0.14);
+  border-color: var(--accent);
+}
+
+.nota-card-data-minimal {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.nota-cor-ponto {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.nota-card-texto-minimal {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.nota-tags-minimal {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.nota-tag-minimal {
+  font-size: 11px;
+  color: var(--text-2);
+  background: var(--surface-2);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 450;
+}
+
+.nota-card-acoes-minimal {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 2px;
+}
+
+.nota-excluir {
+  font-size: 11.5px;
+  color: var(--muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: color 0.12s ease, background 0.12s ease;
+}
+
+.nota-excluir:hover {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.nota-excluir--armado {
+  color: var(--danger);
+  background: var(--danger-soft);
+  font-weight: 600;
+}
+
+.painel-filtros {
+  flex-shrink: 0;
+}
+
+.historico-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--fs-sm);
+}
+
+.historico-item:last-child {
+  border-bottom: none;
+}
+
+.historico-item-topo {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.historico-item-entidade {
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.historico-item-acao {
+  background: var(--surface-2);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+}
+
+.historico-item-data {
+  color: var(--muted);
+  font-size: var(--fs-xs);
+}
+
+.historico-item-dados {
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+}
+
+/* ---------- backdrop da gaveta ---------- */
+.painel-backdrop {
+  display: none;
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 48px;
+  bottom: 0;
+  background: rgba(25, 25, 24, 0.28);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  z-index: 39;
+  opacity: 1;
+  transition: opacity 0.18s ease;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.painel-backdrop.fechado {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (min-width: 1025px) {
+  .painel-backdrop,
+  .painel-backdrop.fechado {
+    display: none !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
+}
+
+/* ---------- modo gaveta (tablet <=1024) ---------- */
+@media (max-width: 1024px) {
+  .painel-backdrop {
+    display: block;
+  }
+
+  .painel {
+    position: fixed;
+    right: 0;
+    top: 48px;
+    bottom: auto;
+    /* fallback vh para browsers sem dvh */
+    height: calc(100vh - 48px);
+    height: calc(100dvh - 48px);
+    max-height: calc(100vh - 48px);
+    max-height: calc(100dvh - 48px);
+    width: 320px;
+    max-width: min(85vw, 360px);
+    z-index: 40;
+    box-shadow: var(--shadow-2);
+    border-left: 1px solid var(--border);
+    overflow: hidden;
+  }
+
+  .painel.fechado {
+    transform: translateX(100%);
+  }
+
+  .painel-resizer {
+    display: none;
+  }
+
+  /* garante width inline não estoure em portrait estreito */
+  .painel[style] {
+    max-width: min(85vw, 360px);
+  }
+}
+
+@media (max-width: 768px) {
+  .painel {
+    width: min(85vw, 360px) !important;
+    max-width: min(85vw, 360px) !important;
+  }
+}

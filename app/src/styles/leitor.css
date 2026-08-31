@@ -1,0 +1,188 @@
+/* ---------- leitor ---------- */
+
+.leitor {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  position: relative;
+}
+
+.leitor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-4);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.leitor-titulo {
+  font-weight: 600;
+  font-size: var(--fs-md);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 320px;
+}
+
+.leitor-paginacao {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.leitor-spacer {
+  flex: 1;
+}
+
+.leitor-corpo {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+}
+
+.leitor-canvas {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.leitor-paginas {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow-y: auto;
+  padding: var(--sp-6) var(--sp-5) var(--sp-9);
+  scroll-behavior: smooth;
+  touch-action: pan-y;
+  /* iPad: promote scroll to compositor, reduce main thread blocking */
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  will-change: scroll-position;
+  transform: translateZ(0);
+  contain: layout style;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.paginas-coluna {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sp-6);
+  flex: 1;
+  /* iPad: promote scrolling to compositor */
+  transform: translateZ(0);
+  will-change: scroll-position;
+  contain: layout;
+}
+
+.paginas-coluna > div {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  contain: layout;
+}
+
+.pagina {
+  width: 100%;
+  max-width: 1100px;
+  /* iPad 60fps: skip offscreen layout/paint. Browser keeps placeholder via intrinsic size. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 1550px;
+  contain: layout style paint;
+}
+
+.pagina-inner {
+  position: relative;
+  width: 100%;
+  background: #fff;
+  border-radius: 2px;
+  box-shadow: var(--shadow-page);
+}
+
+[data-theme="dark"] .pagina-inner {
+  background: #f2f2f0;
+}
+
+.pagina-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 2px;
+  user-select: none;
+  pointer-events: none;
+  /* iPad: hint browser to defer decode offscreen; CSS containment supports virtualization */
+  content-visibility: auto;
+}
+
+.pagina-placeholder {
+  position: absolute;
+  inset: 0;
+  background: var(--surface-2);
+  border-radius: 2px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  contain: strict;
+}
+
+.pagina-camada {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 2px;
+  user-select: none;
+  cursor: text;
+  touch-action: pan-y;
+}
+
+.sel-preview {
+  position: absolute;
+  z-index: 20;
+  background: rgba(255, 224, 59, 0.45);
+  mix-blend-mode: multiply;
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.palavra {
+  position: absolute;
+  color: transparent;
+  white-space: nowrap;
+  line-height: 1;
+  cursor: text;
+}
+
+.pagina-destaques {
+  position: absolute;
+  inset: 0;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+
+.destaque-ret {
+  position: absolute;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.pagina-numero {
+  text-align: center;
+  color: var(--muted);
+  font-size: var(--fs-xs);
+  margin-top: var(--sp-2);
+  font-variant-numeric: tabular-nums;
+}
