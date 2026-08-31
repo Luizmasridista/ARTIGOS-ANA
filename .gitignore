@@ -11,7 +11,7 @@ data/
 backend/data/
 certs/
 tmp/
-Planos*/
+/Planos*/
 __pycache__/
 .pytest_cache/
 .hypothesis/
