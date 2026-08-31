@@ -20,3 +20,9 @@ services:
       # Poppler no container Debian
       - key: POPPLER_DIR
         value: /usr/bin
+      - key: GOVERNANCE_ENFORCE
+        value: 1
+      - key: ALLOWED_IPS
+        sync: false
+      - key: ALLOWED_DEVICE_TOKENS
+        sync: false
