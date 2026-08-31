@@ -97,6 +97,12 @@ func wipeDB(t *testing.T) {
 	if _, err := db.Exec(`DELETE FROM login_tentativas`); err != nil {
 		t.Fatalf("limpar login_tentativas: %v", err)
 	}
+	if _, err := db.Exec(`DELETE FROM dispositivos_autorizados`); err != nil {
+		// tabela pode nao existir em migracoes antigas? ignora erro de nao existir
+		if !strings.Contains(err.Error(), "does not exist") && !strings.Contains(err.Error(), "não existe") {
+			t.Fatalf("limpar dispositivos_autorizados: %v", err)
+		}
+	}
 }
 
 var testAuthCache = map[string]string{}

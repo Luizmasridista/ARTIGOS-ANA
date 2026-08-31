@@ -174,6 +174,17 @@ var schemaStatements = []string{
 	// --- persistencia Render Free (Neon): pdf + imagens em BYTEA para sobreviver ao disco efemero ---
 	`ALTER TABLE artigos ADD COLUMN IF NOT EXISTS pdf_data BYTEA`,
 	`ALTER TABLE paginas ADD COLUMN IF NOT EXISTS imagem_data BYTEA`,
+	// --- governanca: dispositivos/IPs autorizados (hash SHA256(serial+JWT_SECRET), sem serial em claro) ---
+	`CREATE TABLE IF NOT EXISTS dispositivos_autorizados (
+		id BIGSERIAL PRIMARY KEY,
+		identificador TEXT NOT NULL,
+		tipo TEXT NOT NULL,
+		descricao TEXT,
+		criado_em TIMESTAMPTZ NOT NULL DEFAULT now(),
+		UNIQUE(identificador, tipo)
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_dispositivos_tipo ON dispositivos_autorizados(tipo)`,
+	`CREATE INDEX IF NOT EXISTS idx_dispositivos_identificador ON dispositivos_autorizados(identificador)`,
 }
 
 type Config struct {
@@ -2080,4 +2091,67 @@ func (s *Store) HydratePaginaImagem(artigoID int64, numero int, destPath string)
 		return false, err
 	}
 	return true, nil
+}
+
+// --- governanca: dispositivos/IPs autorizados ---
+
+type DispositivoAutorizado struct {
+	ID            int64     `json:"id"`
+	Identificador string    `json:"identificador"`
+	Tipo          string    `json:"tipo"`
+	Descricao     string    `json:"descricao"`
+	CriadoEm      time.Time `json:"criado_em"`
+}
+
+func (s *Store) EnsureDispositivoAutorizado(identificador, tipo, descricao string) error {
+	identificador = strings.TrimSpace(identificador)
+	tipo = strings.TrimSpace(tipo)
+	if identificador == "" || tipo == "" {
+		return fmt.Errorf("identificador e tipo obrigatórios")
+	}
+	_, err := s.db.Exec(`INSERT INTO dispositivos_autorizados (identificador, tipo, descricao) VALUES ($1,$2,$3) ON CONFLICT (identificador, tipo) DO UPDATE SET descricao = EXCLUDED.descricao`, identificador, tipo, descricao)
+	return err
+}
+
+func (s *Store) IsDispositivoAutorizado(identificador, tipo string) (bool, error) {
+	var exists bool
+	err := s.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM dispositivos_autorizados WHERE identificador = $1 AND tipo = $2)`, identificador, tipo).Scan(&exists)
+	return exists, err
+}
+
+func (s *Store) IsIPAutorizado(ip string) (bool, error) {
+	return s.IsDispositivoAutorizado(strings.TrimSpace(ip), "ip")
+}
+
+func (s *Store) IsDeviceTokenAutorizado(token string) (bool, error) {
+	return s.IsDispositivoAutorizado(strings.TrimSpace(token), "device_token")
+}
+
+func (s *Store) ListDispositivosAutorizados() ([]DispositivoAutorizado, error) {
+	rows, err := s.db.Query(`SELECT id, identificador, tipo, COALESCE(descricao,''), criado_em FROM dispositivos_autorizados ORDER BY criado_em DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []DispositivoAutorizado
+	for rows.Next() {
+		var d DispositivoAutorizado
+		if err := rows.Scan(&d.ID, &d.Identificador, &d.Tipo, &d.Descricao, &d.CriadoEm); err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	if out == nil {
+		out = []DispositivoAutorizado{}
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) DeleteDispositivoAutorizado(id int64) (bool, error) {
+	res, err := s.db.Exec(`DELETE FROM dispositivos_autorizados WHERE id = $1`, id)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
 }

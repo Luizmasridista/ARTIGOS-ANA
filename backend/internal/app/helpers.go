@@ -163,7 +163,7 @@ func withCORS(next http.Handler) http.Handler {
 			w.Header().Set("Vary", "Origin")
 		}
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Device-Id, X-Device-Token, X-Device-Serial-Hash, X-Device")
 		// só envia Allow-Credentials quando há origin específico autorizado (já setado acima)
 		if r.Method == http.MethodOptions {
 			// preflight: exige origin permitido em modo estrito
