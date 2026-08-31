@@ -61,7 +61,24 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        navigateFallback: 'index.html',
+        navigateFallbackDenylist: [/^\/api/, /^\/health/],
+        cleanupOutdatedCaches: true,
         runtimeCaching: [
+          {
+            urlPattern: /\/api\/auth\/.*/,
+            handler: 'NetworkOnly',
+            method: 'GET',
+          },
+          {
+            urlPattern: /\/api\/auth\/.*/,
+            handler: 'NetworkOnly',
+            method: 'POST',
+          },
+          {
+            urlPattern: /\/api\/health/,
+            handler: 'NetworkOnly',
+          },
           {
             urlPattern: /\/api\/artigos\/.*\/paginas\/.*\/camada/,
             handler: 'StaleWhileRevalidate',

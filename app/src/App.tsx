@@ -76,10 +76,18 @@ export default function App() {
 }
 
 function AppInner() {
-  // live preview iPad (dev only) — /__ipad-preview ou ?ipadPreview=1
-  const isIpadPreview =
-    typeof window !== 'undefined' &&
-    (window.location.pathname === '/__ipad-preview' || window.location.search.includes('ipadPreview'))
+  // live preview iPad (dev only) — /__ipad-preview ou ?ipadPreview=1 (verificação estrita para não colidir com params normais)
+  const isIpadPreview = (() => {
+    if (typeof window === 'undefined') return false
+    try {
+      const url = new URL(window.location.href)
+      if (url.pathname === '/__ipad-preview' || url.pathname === '/__ipad-preview/') return true
+      if (url.searchParams.has('ipadPreview') || url.searchParams.has('__ipad-preview')) return true
+      return false
+    } catch {
+      return window.location.pathname === '/__ipad-preview' || window.location.search.includes('ipadPreview=')
+    }
+  })()
   if (isIpadPreview) {
     return (
       <Suspense fallback={<div className="home-carregando">Carregando preview…</div>}>
