@@ -1,0 +1,36 @@
+﻿# === segredos / envs ===
+.env
+.env.web
+.env.local
+*.key
+*.pem
+*.crt
+
+# === dados locais ===
+data/
+backend/data/
+certs/
+tmp/
+Planos*/
+__pycache__/
+.pytest_cache/
+.hypothesis/
+
+# === build / deps ===
+app/dist/
+app/dist-electron/
+app/node_modules/
+app/test-results/
+app/playwright-report/
+backend/bin/artigos-ana.exe
+backend/bin/artigos-ana.exe~
+backend/bin/poppler/
+*.log
+
+# === OS ===
+Thumbs.db
+.DS_Store
+*.tmp
+
+# === opencode deps ===
+.opencode/node_modules/
