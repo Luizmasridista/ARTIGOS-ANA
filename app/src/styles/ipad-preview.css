@@ -1,0 +1,106 @@
+/* ---------- iPad live preview (dev only) ---------- */
+
+.ipad-preview-page {
+  min-height: 100vh;
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.ipad-preview-toolbar {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: var(--r-m);
+  padding: var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.ipad-preview-titulo {
+  margin: 0;
+  font-size: var(--fs-lg);
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.ipad-preview-dica {
+  font-size: var(--fs-xs);
+  color: #94a3b8;
+}
+
+.ipad-preview-controles {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.ipad-preview-scale {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-xs);
+  color: #cbd5e1;
+}
+
+.ipad-preview-ajuda {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: #94a3b8;
+}
+
+.ipad-preview-ajuda code {
+  background: #334155;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #f1f5f9;
+}
+
+.ipad-preview-grid {
+  display: flex;
+  gap: var(--sp-6);
+  overflow-x: auto;
+  padding-bottom: var(--sp-4);
+  align-items: flex-start;
+}
+
+.ipad-frame-wrap {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.ipad-frame-label {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: #f1f5f9;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.ipad-frame-device {
+  font-weight: 400;
+  color: #94a3b8;
+  font-size: var(--fs-xs);
+}
+
+.ipad-frame {
+  background: white;
+  border: 12px solid #020617;
+  border-radius: 24px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.ipad-frame-foot {
+  font-size: var(--fs-xs);
+  color: #94a3b8;
+  text-align: center;
+}

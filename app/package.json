@@ -1,0 +1,40 @@
+{
+  "name": "artigos-ana-app",
+  "productName": "Artigos Ana",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Leitor de artigos PDF com marcação de texto, notas e exportação para DOCX",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "npm run build:electron && concurrently -k -n vite,electron -c cyan,green \"vite\" \"wait-on tcp:127.0.0.1:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
+    "dev:vite": "vite --host 127.0.0.1 --port 5173",
+    "build:electron": "tsc -p tsconfig.electron.json",
+    "build": "tsc -b && vite build && npm run build:electron",
+    "start": "npm run build && electron .",
+    "test": "vitest run",
+    "test:e2e": "npm run build && node e2e/marcacao.mjs",
+    "test:responsivo": "npm run build && node e2e/responsivo.mjs",
+    "test:playwright": "playwright test",
+    "test:playwright:ui": "playwright test --ui",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.5",
+    "@vitejs/plugin-react": "^6.1.0",
+    "concurrently": "^10.0.5",
+    "cross-env": "^10.1.0",
+    "electron": "^44.0.0",
+    "playwright": "^1.62.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2",
+    "vite-plugin-pwa": "^1.3.0",
+    "vitest": "^4.1.11",
+    "wait-on": "^9.1.0"
+  }
+}

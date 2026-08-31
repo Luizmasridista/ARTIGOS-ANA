@@ -1,0 +1,41 @@
+/* ---------- tooltip de seleção ---------- */
+
+.tooltip-selecao {
+  position: absolute;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-m);
+  box-shadow: var(--shadow-2);
+  padding: 6px;
+  user-select: none;
+}
+
+.tooltip-cor {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.1s ease;
+}
+
+.tooltip-cor:hover {
+  transform: scale(1.12);
+}
+
+.tooltip-divisor {
+  width: 1px;
+  align-self: stretch;
+  background: var(--border);
+  margin: 0 2px;
+}
+
+.tooltip-acao {
+  font-size: var(--fs-sm);
+  padding: 4px 10px;
+}

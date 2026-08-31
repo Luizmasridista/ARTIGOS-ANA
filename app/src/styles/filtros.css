@@ -1,0 +1,201 @@
+/* ---------- notas tags / filtros ---------- */
+
+.painel-filtros {
+  padding: 10px var(--sp-3);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--surface);
+  flex-shrink: 0;
+}
+
+.filtro-grupo {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+
+.filtro-label {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.filtro-chips {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex: 1;
+  min-width: 0;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+.filtro-chips::-webkit-scrollbar {
+  height: 4px;
+}
+
+.filtro-chips::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 2px;
+}
+
+.chip-tag {
+  font-size: 12px;
+  font-weight: 550;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-2);
+  cursor: pointer;
+  transition: all 0.12s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.chip-tag:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.chip-tag.ativa {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.chip-tag-remove {
+  background: rgba(255,255,255,0.22);
+  border: none;
+  color: inherit;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+}
+
+.filtro-cores {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.chip-cor {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid rgba(0,0,0,0.15);
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.1s ease, outline 0.12s ease;
+}
+
+.chip-cor:hover {
+  transform: scale(1.12);
+}
+
+.chip-cor.ativa {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.filtro-contador {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  font-size: 11px;
+  color: var(--muted);
+  padding-top: 2px;
+  border-top: 1px solid var(--border);
+  margin-top: 2px;
+}
+
+.nota-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.nota-tag {
+  font-size: var(--fs-xs);
+  font-weight: 550;
+  background: var(--accent-soft);
+  color: var(--accent);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.nota-cor-bolinha {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid rgba(0,0,0,0.12);
+  flex-shrink: 0;
+}
+
+.composer-tags-linha {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+}
+
+.input-tag {
+  flex: 1;
+}
+
+.composer-tags-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.composer-cores {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.composer-cores-lista {
+  display: flex;
+  gap: 6px;
+}
+
+.composer-cor {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid rgba(0,0,0,0.12);
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+.composer-cor:hover {
+  transform: scale(1.12);
+}
+
+.composer-cor.ativa {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

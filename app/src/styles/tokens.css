@@ -1,0 +1,75 @@
+:root {
+  color-scheme: light;
+
+  --bg: #f7f7f5;
+  --surface: #ffffff;
+  --surface-rgb: 255 255 255;
+  --surface-2: #f1f1ee;
+  --surface-3: #eaeae6;
+  --border: #e4e4e0;
+  --border-strong: #d2d2cc;
+  --text: #191918;
+  --text-2: #55554f;
+  --muted: #8a8a84;
+  --accent: #E95420;
+  --accent-hover: #C9441B;
+  --accent-soft: rgba(233, 84, 32, 0.08);
+  --danger: #c94f4f;
+  --danger-hover: #b34343;
+  --danger-soft: rgba(201, 79, 79, 0.08);
+  --focus-ring: rgba(233, 84, 32, 0.35);
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-2: 0 8px 32px rgba(0, 0, 0, 0.16);
+  --shadow-page: 0 1px 3px rgba(0, 0, 0, 0.1), 0 6px 20px rgba(0, 0, 0, 0.07);
+
+  --r-s: 6px;
+  --r-m: 10px;
+  --r-l: 14px;
+
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-7: 32px;
+  --sp-8: 40px;
+  --sp-9: 48px;
+
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-md: 14px;
+  --fs-lg: 16px;
+  --fs-xl: 20px;
+  --fs-2xl: 26px;
+
+  --font-sans: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #161616;
+  --surface: #1f1f1f;
+  --surface-rgb: 31 31 31;
+  --surface-2: #262626;
+  --surface-3: #2d2d2d;
+  --border: #303030;
+  --border-strong: #3f3f3f;
+  --text: #ededeb;
+  --text-2: #b5b5af;
+  --muted: #7d7d78;
+  --accent: #EB6536;
+  --accent-hover: #F07E55;
+  --accent-soft: rgba(235, 101, 54, 0.14);
+  --danger: #e06a6a;
+  --danger-hover: #e98080;
+  --danger-soft: rgba(224, 106, 106, 0.12);
+  --focus-ring: rgba(235, 101, 54, 0.4);
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 8px 32px rgba(0, 0, 0, 0.55);
+  --shadow-page: 0 1px 3px rgba(0, 0, 0, 0.5), 0 6px 20px rgba(0, 0, 0, 0.35);
+}

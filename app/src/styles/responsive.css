@@ -1,0 +1,71 @@
+/* ---------- modo web e responsividade ---------- */
+/* Painel drawer específico em painel.css / painel-ipad.css (single responsibility) */
+
+[data-modo="web"] .janela-controles {
+  display: none;
+}
+
+[data-modo="web"] .header {
+  -webkit-app-region: no-drag;
+}
+
+.btn-painel {
+  display: none;
+}
+
+@media (max-width: 1024px) {
+  .btn-painel {
+    display: inline-flex;
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* painel drawer movido para painel.css — altura com dvh + safe-area em painel-ipad.css */
+
+  .leitor-toolbar {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  .leitor-titulo {
+    min-width: 140px;
+  }
+
+  button,
+  .btn {
+    min-height: 40px;
+  }
+
+  .janela-btn {
+    min-height: 17px;
+  }
+
+  .tooltip-cor {
+    width: 26px;
+    height: 26px;
+  }
+
+  .popover-cor {
+    width: 24px;
+    height: 24px;
+  }
+
+  .nota-badge {
+    width: 22px;
+    height: 22px;
+  }
+}
+
+@media (max-width: 640px) {
+  .leitor-paginas {
+    padding: var(--sp-3) var(--sp-2) var(--sp-8);
+  }
+
+  .biblioteca {
+    padding: var(--sp-4) var(--sp-3);
+  }
+
+  .leitor-paginacao span {
+    display: none;
+  }
+}
