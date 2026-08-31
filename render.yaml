@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: artigos-ana
+    env: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeploy: false
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ALLOWED_ORIGIN
+        sync: false
+      - key: BIND_ADDR
+        value: 0.0.0.0
+      - key: PORT
+        value: 10000
+      # Poppler no container Debian
+      - key: POPPLER_DIR
+        value: /usr/bin
