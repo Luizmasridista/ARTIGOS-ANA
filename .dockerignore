@@ -1,0 +1,19 @@
+node_modules
+app/node_modules
+app/dist
+app/dist-electron
+backend/data
+data
+tmp
+.git
+.gitignore
+.opencode
+docs/planos
+Planos da sessão
+__pycache__
+.pytest_cache
+.hypothesis
+*.log
+.env
+.env.web
+certs
