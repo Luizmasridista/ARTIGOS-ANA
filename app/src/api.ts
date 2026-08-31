@@ -157,6 +157,14 @@ function montarHeadersAutenticados(headersExistentes?: Record<string, string>): 
       }
     }
   } catch {}
+  try {
+    if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+      const did = localStorage.getItem('ana_device_id') || localStorage.getItem('ana_deviceId') || localStorage.getItem('deviceId')
+      if (did && !h['X-Device-Id'] && !h['X-Device-ID'] && !h['x-device-id']) {
+        h['X-Device-Id'] = did
+      }
+    }
+  } catch {}
   return h
 }
 

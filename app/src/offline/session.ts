@@ -45,9 +45,17 @@ export async function clearOfflineSession(userId: number): Promise<void> {
 
 export async function getOrCreateDeviceId(): Promise<string> {
   const existing = await kvGet('meta', 'deviceId') as string | undefined
-  if (existing && typeof existing === 'string') return existing
+  if (existing && typeof existing === 'string') {
+    try {
+      if (typeof localStorage !== 'undefined') localStorage.setItem('ana_device_id', existing)
+    } catch {}
+    return existing
+  }
   const id = genUUID()
   await kvSet('meta', 'deviceId', id)
+  try {
+    if (typeof localStorage !== 'undefined') localStorage.setItem('ana_device_id', id)
+  } catch {}
   return id
 }
 

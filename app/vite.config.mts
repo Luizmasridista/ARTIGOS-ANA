@@ -3,6 +3,31 @@ import type { Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
+function faviconFixPlugin(): Plugin {
+  return {
+    name: 'favicon-fix',
+    // garante que favicon/icons sejam absolutos com ?v=2 mesmo com base './' (Electron)
+    // Vite reescreve "/favicon.ico" -> "./favicon.ico" quando base='./', este hook corrige após.
+    transformIndexHtml(html) {
+      let out = html
+      // corrige favicon.ico relativo -> absoluto versionado
+      out = out.replaceAll('href="./favicon.ico', 'href="/favicon.ico')
+      out = out.replaceAll('href="./icons/', 'href="/icons/')
+      // garante ?v=2 cache-bust se ainda não tiver query
+      out = out.replaceAll('/favicon.ico"', '/favicon.ico?v=2"')
+      out = out.replaceAll('/favicon.ico?v=2?v=2"', '/favicon.ico?v=2"')
+      // apple-touch já versionado no source, mas garante relativo também
+      out = out.replaceAll('/apple-touch-icon.png"', '/apple-touch-icon.png?v=2"')
+      out = out.replaceAll('/apple-touch-icon.png?v=2?v=2"', '/apple-touch-icon.png?v=2"')
+      out = out.replaceAll('/favicon-32x32.png"', '/favicon-32x32.png?v=2"')
+      out = out.replaceAll('/favicon-32x32.png?v=2?v=2"', '/favicon-32x32.png?v=2"')
+      out = out.replaceAll('/favicon-16x16.png"', '/favicon-16x16.png?v=2"')
+      out = out.replaceAll('/favicon-16x16.png?v=2?v=2"', '/favicon-16x16.png?v=2"')
+      return out
+    },
+  }
+}
+
 function cspPlugin(): Plugin {
   return {
     name: 'html-csp',
@@ -30,6 +55,7 @@ export default defineConfig({
   base: './',
   plugins: [
     react(),
+    faviconFixPlugin(),
     cspPlugin(),
     VitePWA({
       registerType: 'autoUpdate',
@@ -62,7 +88,15 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         navigateFallback: 'index.html',
-        navigateFallbackDenylist: [/^\/api/, /^\/health/],
+        navigateFallbackDenylist: [
+          /^\/api/,
+          /^\/health/,
+          /^\/favicon\.ico/,
+          /^\/icons\//,
+          /^\/manifest/,
+          /^\/sw\.js/,
+          /^\/workbox/,
+        ],
         cleanupOutdatedCaches: true,
         runtimeCaching: [
           {
