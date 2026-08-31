@@ -62,10 +62,17 @@ func (a *App) Routes() http.Handler {
 			mux.ServeHTTP(w, r)
 			return
 		}
+		// SPA fallback só para GET/HEAD; outros métodos não servem index.html
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			w.Header().Set("Cache-Control", "no-store")
+			http.NotFound(w, r)
+			return
+		}
 		limpo := strings.TrimPrefix(filepath.Clean("/"+r.URL.Path), "/")
 		alvo := filepath.Join(a.WWWDir, filepath.FromSlash(limpo))
-		// trava path traversal: garante que alvo está dentro de WWWDir
-		if !strings.HasPrefix(alvo, a.WWWDir) {
+		// trava path traversal: garante que alvo está dentro de WWWDir (com separador)
+		if !strings.HasPrefix(alvo, a.WWWDir+string(os.PathSeparator)) && alvo != a.WWWDir {
+			w.Header().Set("Cache-Control", "no-store")
 			http.NotFound(w, r)
 			return
 		}
@@ -78,6 +85,17 @@ func (a *App) Routes() http.Handler {
 			}
 			fileServer.ServeHTTP(w, r)
 			return
+		}
+		// Se o path parece ser arquivo com extensão (ex: .js/.css/.png/.json) mas não existe, retorna 404 em vez de index.html
+		// Isso evita que o SW ou navegador receba HTML no lugar de JS e quebre o boot sem mensagem.
+		if ext := filepath.Ext(r.URL.Path); ext != "" {
+			// exceção: .html sem arquivo pode cair no fallback SPA? Para SPA sem extensão, quer fallback; com extensão, é asset faltando.
+			// Workaround: se for .html explícito e não existe, ainda faz fallback (SPA deep link vazia)
+			if ext != ".html" && ext != ".htm" {
+				w.Header().Set("Cache-Control", "no-store")
+				http.NotFound(w, r)
+				return
+			}
 		}
 		w.Header().Set("Cache-Control", "no-store")
 		http.ServeFile(w, r, filepath.Join(a.WWWDir, "index.html"))
