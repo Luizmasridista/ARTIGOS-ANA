@@ -4,8 +4,21 @@ import { clearOfflineSession, loadLatestValidSession, saveOfflineSession } from 
 
 function isNetworkError(e: unknown): boolean {
   if (e instanceof TypeError) return true
+  if (e instanceof DOMException && e.name === 'AbortError') return true
   const msg = e instanceof Error ? e.message : String(e)
-  return /Failed to fetch|NetworkError|network|Load failed/i.test(msg)
+  return /Failed to fetch|NetworkError|network|Load failed|AbortError|Timeout|aborted/i.test(msg)
+}
+
+const ME_TIMEOUT_MS = 5000
+
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  let t: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, rej) => {
+    t = setTimeout(() => rej(new DOMException('Timeout', 'AbortError')), ms)
+  })
+  return Promise.race([p, timeout]).finally(() => {
+    if (t !== undefined) clearTimeout(t)
+  }) as Promise<T>
 }
 
 export interface AuthUser {
@@ -35,7 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     try {
-      const me = await api.me()
+      const me = await withTimeout(api.me(), ME_TIMEOUT_MS)
       if (me) {
         setUser({ id: me.id, nome: me.nome })
         await saveOfflineSession({ id: me.id, nome: me.nome })
@@ -53,7 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cancelado = false
     const init = async () => {
       try {
-        const me = await api.me()
+        const me = await withTimeout(api.me(), ME_TIMEOUT_MS)
         if (!cancelado) {
           if (me) {
             setUser({ id: me.id, nome: me.nome })
@@ -63,10 +76,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch (e) {
         if (!cancelado) {
           if (isNetworkError(e)) {
-            const sess = await loadLatestValidSession()
-            if (sess) setUser({ id: sess.id, nome: sess.nome })
-            else setUser(null)
-          } else setUser(null)
+            try {
+              const sess = await loadLatestValidSession()
+              if (sess && !cancelado) setUser({ id: sess.id, nome: sess.nome })
+              else if (!cancelado) setUser(null)
+            } catch {
+              if (!cancelado) setUser(null)
+            }
+          } else if (!cancelado) setUser(null)
         }
       } finally {
         if (!cancelado) setLoading(false)
