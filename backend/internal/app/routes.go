@@ -15,6 +15,11 @@ func (a *App) Routes() http.Handler {
 	mux.HandleFunc("POST /api/auth/login", a.handleLogin)
 	mux.HandleFunc("POST /api/auth/logout", a.handleLogout)
 	mux.HandleFunc("GET /api/auth/me", a.handleMe)
+	mux.HandleFunc("POST /api/governanca/registrar", a.handleGovernancaRegistrar)
+	mux.HandleFunc("GET /api/governanca/dispositivos", a.handleGovernancaListar)
+	mux.HandleFunc("DELETE /api/governanca/dispositivos/{id}", a.handleGovernancaRemover)
+	mux.HandleFunc("POST /api/governanca/dispositivos/{id}/remover", a.handleGovernancaRemover)
+	mux.HandleFunc("GET /api/governanca/status", a.handleGovernancaStatus)
 	mux.HandleFunc("GET /api/artigos", a.handleListArtigos)
 	mux.HandleFunc("POST /api/artigos", a.handleCreateArtigo)
 	mux.HandleFunc("GET /api/artigos/{id}", a.handleGetArtigo)
@@ -47,6 +52,7 @@ func (a *App) Routes() http.Handler {
 
 	if a.WWWDir == "" {
 		h := a.authMiddleware(mux)
+		h = a.governancaMiddleware(h)
 		h = ipadDetectorMiddleware(h)
 		h = a.generalRateLimitMiddleware(h)
 		h = bodyLimitMiddleware(h)
@@ -77,8 +83,8 @@ func (a *App) Routes() http.Handler {
 			return
 		}
 		if info, err := os.Stat(alvo); err == nil && !info.IsDir() {
-			// cache estático: 1 dia para assets, 1h para PWA precache (manifest/sw/workbox)
-			if strings.HasPrefix(r.URL.Path, "/assets/") {
+			// cache estático: 1 dia para assets/favicon/icons, 1h para PWA precache (manifest/sw/workbox)
+			if strings.HasPrefix(r.URL.Path, "/assets/") || r.URL.Path == "/favicon.ico" || strings.HasPrefix(r.URL.Path, "/icons/") {
 				w.Header().Set("Cache-Control", "public, max-age=86400, immutable")
 			} else if r.URL.Path == "/manifest.json" || r.URL.Path == "/manifest.webmanifest" || r.URL.Path == "/sw.js" || r.URL.Path == "/service-worker.js" || (strings.HasPrefix(r.URL.Path, "/workbox") && strings.HasSuffix(r.URL.Path, ".js")) {
 				w.Header().Set("Cache-Control", "public, max-age=3600")
@@ -101,6 +107,7 @@ func (a *App) Routes() http.Handler {
 		http.ServeFile(w, r, filepath.Join(a.WWWDir, "index.html"))
 	})
 	h := a.authMiddleware(spa)
+	h = a.governancaMiddleware(h)
 	h = ipadDetectorMiddleware(h)
 	h = a.generalRateLimitMiddleware(h)
 	h = bodyLimitMiddleware(h)
