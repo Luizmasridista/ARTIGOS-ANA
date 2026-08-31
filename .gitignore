@@ -2,6 +2,7 @@
 .env
 .env.web
 .env.local
+.neon
 *.key
 *.pem
 *.crt
