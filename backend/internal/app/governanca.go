@@ -157,11 +157,17 @@ func (a *App) hashSerial(serial string) string {
 
 // governancaMiddleware bloqueia acesso nao autorizado por IP ou device token.
 // Excecoes: /health e /api/health sempre publicos (Render healthcheck),
+// /api/governanca/status provisório debug sempre passa (auth ainda exige login),
 // OPTIONS preflight sempre liberado, e quando governance nao estiver enforced (dev).
 func (a *App) governancaMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// healthcheck sempre publico
 		if isHealthPath(r.URL.Path) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		// status provisório: deixa passar para o handler exibir autorizado/bloqueado (authMiddleware valida login depois)
+		if r.URL.Path == "/api/governanca/status" {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -393,7 +399,7 @@ func (a *App) handleGovernancaRemover(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleGovernancaStatus(w http.ResponseWriter, r *http.Request) {
-	// endpoint publico? melhor autenticado para nao vazar info
+	// autenticado para nao vazar info para anônimo; provisório debug
 	if _, ok := getUsuarioID(r); !ok {
 		writeErro(w, http.StatusUnauthorized, "não autenticado")
 		return
@@ -403,6 +409,11 @@ func (a *App) handleGovernancaStatus(w http.ResponseWriter, r *http.Request) {
 		ip = h
 	}
 	deviceId := extractDeviceId(r)
+	xDeviceId := strings.TrimSpace(r.Header.Get("X-Device-Id"))
+	if xDeviceId == "" {
+		xDeviceId = strings.TrimSpace(r.Header.Get("X-Device-Token"))
+	}
+	xForwardedFor := strings.TrimSpace(r.Header.Get("X-Forwarded-For"))
 	allowedIPs := parseAllowedList(os.Getenv("ALLOWED_IPS"))
 	allowedTokens := parseAllowedList(os.Getenv("ALLOWED_DEVICE_TOKENS"))
 	if len(allowedTokens) == 0 {
@@ -425,7 +436,15 @@ func (a *App) handleGovernancaStatus(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	autorizado := via != "bloqueado"
 	writeJSON(w, http.StatusOK, map[string]any{
+		// campos provisórios esperados pelo frontend debug (raw para copiar)
+		"ip": ip,
+		"deviceId": deviceId,
+		"autorizado": autorizado,
+		"xDeviceId": xDeviceId,
+		"xForwardedFor": xForwardedFor,
+		// compat / detalhe
 		"enforce": enforce,
 		"ip_mascarado": maskIP(ip),
 		"device_mascarado": maskDevice(deviceId),
