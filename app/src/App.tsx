@@ -33,6 +33,7 @@ import { aplicarTema, temaInicial, type Tema } from './tema'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { BotaoTema } from './components/BotaoTema'
 import { Home } from './components/Home'
+import { GovStatusButton } from './components/GovStatusButton' // PROVISORIO debug governança — remover junto com GovStatusButton.tsx
 import {
   IconeBusca,
   IconeDownload,
@@ -239,6 +240,8 @@ function AppInner() {
             <span className="header-nome" title={user.nome}>
               {user.nome}
             </span>
+            {/* PROVISORIO debug governança — botão Meu status (GET /api/governanca/status) — remover depois */}
+            <GovStatusButton />
             <button
               type="button"
               className="btn btn-sm"

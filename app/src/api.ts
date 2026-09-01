@@ -448,4 +448,18 @@ export const api = {
       `/api/sync/pull${q}`,
     )
   },
+
+  // PROVISORIO debug governança — GET /api/governanca/status retorna {ip, deviceId, autorizado, xDeviceId, xForwardedFor}
+  getGovernancaStatus: () =>
+    request<{
+      ip: string
+      deviceId: string
+      autorizado: boolean
+      xDeviceId: string
+      xForwardedFor: string
+      enforce: boolean
+      ip_mascarado: string
+      device_mascarado: string
+      via: string
+    }>('/api/governanca/status'),
 }
