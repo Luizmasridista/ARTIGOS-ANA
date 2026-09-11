@@ -11,6 +11,22 @@ function isNetworkError(e: unknown): boolean {
   return /Failed to fetch|NetworkError|network|Load failed/i.test(msg)
 }
 
+// validarArquivoPDF centraliza as regras do que pode ser enviado.
+// iPad quando o PDF está no iCloud e ainda não baixou (Safari manda corpo
+// vazio e o servidor responde 400) — barra antes com mensagem clara.
+export function validarArquivoPDF(
+  file: { type: string; name: string; size: number } | null | undefined,
+): string | null {
+  if (!file) return 'Escolha um arquivo PDF.'
+  if (!(file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'))) {
+    return 'Escolha um arquivo PDF.'
+  }
+  if (!file.size) {
+    return 'O arquivo está vazio ou ainda baixando do iCloud. Aguarde o download concluir e tente de novo.'
+  }
+  return null
+}
+
 // aguardarJob espera o worker concluir o processamento do PDF (polling).
 // Lança erro 'job-falhou' se o processamento falhar, 'job-tempo' se estourar 12min.
 async function aguardarJob(jobId: number): Promise<void> {
@@ -155,10 +171,12 @@ export function Biblioteca({ onAbrirArtigo }: Props) {
         (f) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'),
       )
       setErroEnvio(null)
-      if (!file) {
-        setErroEnvio('Escolha um arquivo PDF.')
+      const erroArquivo = validarArquivoPDF(file)
+      if (erroArquivo) {
+        setErroEnvio(erroArquivo)
         return
       }
+      if (!file) return
       setEnviando(file.name)
       try {
         const criado = await api.criarArtigo(file)

@@ -368,7 +368,8 @@ export const api = {
   },
   criarArtigo: (file: File, titulo?: string) => {
     const form = new FormData()
-    form.append('file', file)
+    // 3º arg garante filename (alguns WebKit mandam "blob" sem nome)
+    form.append('file', file, file.name || 'documento.pdf')
     if (titulo) form.append('titulo', titulo)
     return request<ArtigoCriado>('/api/artigos', { method: 'POST', body: form })
   },
