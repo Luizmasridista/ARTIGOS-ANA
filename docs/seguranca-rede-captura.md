@@ -7,7 +7,7 @@ Foco: atacante não ataca o server diretamente, mas fareja a rede (WiFi comparti
 | Vetor | Como ataca | O que captura | Resultado com blindagem atual |
 |-------|------------|---------------|------------------------------|
 | **Sniffing passivo http** | Wireshark/ARP spoof na LAN, proxy transparente | `Set-Cookie: ana_session=...`, `Authorization: Bearer ...`, PDFs, notas, `GET /api/artigos` | **Sem TLS**: tráfego em claro, cookie pode ser lido. **Mitigado** com `TLS_CERT/TLS_KEY` ou `GROK https` (ver abaixo). |
-| **Replay** | Captura cookie e reenvia de IP diferente `X-Forwarded-For: 9.9.9.99` | Sessão hijack | **Replay funciona** sobre http (sem vínculo IP) — demonstra que sniffing = hijack total. Protegido apenas com TLS para impedir captura. |
+| **Replay** | Captura cookie e reenvia de IP diferente `CF-Connecting-IP: 9.9.9.99` | Sessão hijack | **Replay funciona** sobre http (sem vínculo IP) — demonstra que sniffing = hijack total. Protegido apenas com TLS para impedir captura. |
 | **Cache proxy** | Proxy corporativo cacheia `GET /api/artigos` | Lista de artigos, notas | **Mitigado** `Cache-Control: no-store, no-cache, must-revalidate` + `Pragma: no-cache` em todas `/api/` (`helpers.go:182`) |
 | **Downgrade MITM** | Atacante força http quando usuário digitou http | Remove https e fareja | **Mitigado** quando via `https`: `HSTS max-age=31536000; includeSubDomains; preload` (`helpers.go:187`) + `X-Forwarded-Proto: https` do GROK |
 | **XSS → localStorage** | Injeta `<script>` via nota, lê `localStorage.getItem('ana_token')` | Token JWT | **Mitigado** `HttpOnly` cookie + `CSP script-src 'self'` + frontend só persiste `ana_token` em `file:` (`app/src/api.ts:139`), nunca em `https:` web |
