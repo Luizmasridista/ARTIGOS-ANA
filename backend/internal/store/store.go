@@ -474,6 +474,18 @@ func (s *Store) GetUsuarioByID(id int64) (*Usuario, error) {
 	return &u, nil
 }
 
+// SetUsuarioSenha grava o hash bcrypt da senha (nunca a senha em claro).
+func (s *Store) SetUsuarioSenha(id int64, hash string) error {
+	_, err := s.db.Exec(`UPDATE usuarios SET senha_hash = $1 WHERE id = $2`, hash, id)
+	return err
+}
+
+// SetArtigoTitulo atualiza o título (usado ao extrair o título do paper no worker).
+func (s *Store) SetArtigoTitulo(id int64, titulo string) error {
+	_, err := s.db.Exec(`UPDATE artigos SET titulo = $1 WHERE id = $2`, titulo, id)
+	return err
+}
+
 type LoginTentativa struct {
 	ID                int64
 	IP                string
@@ -2121,10 +2133,6 @@ func (s *Store) IsDispositivoAutorizado(identificador, tipo string) (bool, error
 
 func (s *Store) IsIPAutorizado(ip string) (bool, error) {
 	return s.IsDispositivoAutorizado(strings.TrimSpace(ip), "ip")
-}
-
-func (s *Store) IsDeviceTokenAutorizado(token string) (bool, error) {
-	return s.IsDispositivoAutorizado(strings.TrimSpace(token), "device_token")
 }
 
 func (s *Store) ListDispositivosAutorizados() ([]DispositivoAutorizado, error) {

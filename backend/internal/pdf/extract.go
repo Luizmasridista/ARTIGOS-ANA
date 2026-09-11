@@ -81,6 +81,33 @@ func RunPdfToTextBBoxLayout(ctx context.Context, pdftotext, workDir, pdfPath, ou
 	return nil
 }
 
+// RunPdfToTextPlain extrai o texto simples das primeiras páginas (para título do paper).
+// lastPage <= 0 significa só a primeira página.
+func RunPdfToTextPlain(ctx context.Context, popplerDir, workDir, pdfPath string, lastPage int) (string, error) {
+	pdftotext := resolvePopplerBin(popplerDir, "pdftotext")
+	if !hasPopplerBin(pdftotext) {
+		return "", fmt.Errorf("pdftotext não encontrado em %s", popplerDir)
+	}
+	relPDF, err := filepath.Rel(workDir, pdfPath)
+	if err != nil {
+		return "", err
+	}
+	args := []string{"-enc", "UTF-8", "-layout"}
+	if lastPage > 0 {
+		args = append(args, "-f", "1", "-l", strconv.Itoa(lastPage))
+	} else {
+		args = append(args, "-f", "1", "-l", "1")
+	}
+	args = append(args, relPDF, "-")
+	cmd := exec.CommandContext(ctx, pdftotext, args...)
+	cmd.Dir = workDir
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("pdftotext texto falhou: %v", err)
+	}
+	return string(out), nil
+}
+
 func resolvePopplerBin(dir, name string) string {
 	candidates := []string{}
 	if dir != "" {

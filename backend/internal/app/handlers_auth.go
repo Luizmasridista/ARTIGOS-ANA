@@ -11,9 +11,29 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 const cookieName = "ana_session"
+
+// minSenhaLen é o tamanho mínimo da senha no primeiro acesso (criação no PC).
+const minSenhaLen = 4
+
+func hashSenha(senha string) (string, error) {
+	h, err := bcrypt.GenerateFromPassword([]byte(senha), bcrypt.DefaultCost)
+	if err != nil {
+		return "", err
+	}
+	return string(h), nil
+}
+
+func confereSenha(hash, senha string) bool {
+	if hash == "" || senha == "" {
+		return false
+	}
+	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(senha)) == nil
+}
 
 type jwtPayload struct {
 	Sub  int64  `json:"sub"`
@@ -303,7 +323,8 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
-		Nome string `json:"nome"`
+		Nome  string `json:"nome"`
+		Senha string `json:"senha"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		if strings.Contains(err.Error(), "request body too large") {
@@ -324,7 +345,7 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if in.Nome != "Ana Bagatinii" && in.Nome != "Luiz" {
 		log.Printf("[auth] usuário inválido ip=%s nome=%q", ip, in.Nome)
 		a.recordFailure(ip)
-		writeErro(w, http.StatusUnauthorized, "usuário inválido")
+		writeErro(w, http.StatusUnauthorized, "credenciais inválidas")
 		return
 	}
 	u, err := a.DB.GetUsuarioByNome(in.Nome)
@@ -336,7 +357,37 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if u == nil {
 		log.Printf("[auth] usuário não encontrado no DB ip=%s nome=%q", ip, in.Nome)
 		a.recordFailure(ip)
-		writeErro(w, http.StatusUnauthorized, "usuário inválido")
+		writeErro(w, http.StatusUnauthorized, "credenciais inválidas")
+		return
+	}
+	if strings.TrimSpace(u.SenhaHash) == "" {
+		// Conta ainda sem senha: cerimônia de criação, SOMENTE direto no PC
+		// (sem proxy no caminho). Fora do PC, nega para ninguém sequestrar a conta.
+		if !isDirectLoopback(r) {
+			log.Printf("[auth] sem senha e fora do PC ip=%s nome=%q", ip, in.Nome)
+			writeErro(w, http.StatusForbidden, "conta sem senha: crie a senha no PC (http://127.0.0.1:8734)")
+			return
+		}
+		if len([]rune(strings.TrimSpace(in.Senha))) < minSenhaLen {
+			writeErro(w, http.StatusBadRequest, "defina uma senha de ao menos 4 caracteres no primeiro acesso")
+			return
+		}
+		hash, err := hashSenha(strings.TrimSpace(in.Senha))
+		if err != nil {
+			log.Printf("[auth] hash senha erro ip=%s err=%v", ip, err)
+			writeErro(w, http.StatusInternalServerError, "falha ao definir senha")
+			return
+		}
+		if err := a.DB.SetUsuarioSenha(u.ID, hash); err != nil {
+			log.Printf("[auth] SetUsuarioSenha erro ip=%s err=%v", ip, err)
+			writeErro(w, http.StatusInternalServerError, "falha ao definir senha")
+			return
+		}
+		log.Printf("[auth] senha inicial criada ip=%s nome=%q id=%d", ip, u.Nome, u.ID)
+	} else if !confereSenha(u.SenhaHash, in.Senha) {
+		log.Printf("[auth] senha incorreta ip=%s nome=%q", ip, in.Nome)
+		a.recordFailure(ip)
+		writeErro(w, http.StatusUnauthorized, "credenciais inválidas")
 		return
 	}
 	log.Printf("[auth] sucesso ip=%s nome=%q id=%d", ip, u.Nome, u.ID)

@@ -350,7 +350,7 @@ func TestHardening_Cookie_Atributos(t *testing.T) {
 	_ = os.Setenv("ALLOW_INSECURE_COOKIE", "1")
 	_ = os.Unsetenv("ALLOWED_ORIGIN")
 	ts, _ := newTestServer(t)
-	body, _ := json.Marshal(map[string]string{"nome": "Ana Bagatinii"})
+	body, _ := json.Marshal(map[string]string{"nome": "Ana Bagatinii", "senha": testSenha})
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/auth/login", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)

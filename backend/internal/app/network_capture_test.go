@@ -16,7 +16,7 @@ func TestCapture_Sniffing_Replay(t *testing.T) {
 	defer func() { _ = os.Unsetenv("ALLOWED_ORIGIN") }()
 	ts, _ := newTestServer(t)
 	// login captura Set-Cookie simulando sniffing passivo em http
-	body, _ := json.Marshal(map[string]string{"nome": "Ana Bagatinii"})
+	body, _ := json.Marshal(map[string]string{"nome": "Ana Bagatinii", "senha": testSenha})
 	req, _ := http.NewRequest("POST", ts.URL+"/api/auth/login", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	resp, _ := http.DefaultClient.Do(req)
@@ -122,7 +122,8 @@ func TestCapture_Session_Fixation(t *testing.T) {
 	ts, _ := newTestServer(t)
 	// atacante tenta fixar cookie antes do login
 	fixed := "fixed-session-value-evil"
-	req, _ := http.NewRequest("POST", ts.URL+"/api/auth/login", bytes.NewReader([]byte(`{"nome":"Ana Bagatinii"}`)))
+	fixedBody, _ := json.Marshal(map[string]string{"nome": "Ana Bagatinii", "senha": testSenha})
+	req, _ := http.NewRequest("POST", ts.URL+"/api/auth/login", bytes.NewReader(fixedBody))
 	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(&http.Cookie{Name: "ana_session", Value: fixed})
 	resp, _ := http.DefaultClient.Do(req)
@@ -156,7 +157,7 @@ func TestCapture_Authorization_Leak_URL(t *testing.T) {
 	}
 	resp.Body.Close()
 	// body de login não deve retornar senha (não tem) e token só em Set-Cookie + json mas não em URL
-	body, _ := json.Marshal(map[string]string{"nome": "Ana Bagatinii"})
+	body, _ := json.Marshal(map[string]string{"nome": "Ana Bagatinii", "senha": testSenha})
 	req, _ = http.NewRequest("POST", ts.URL+"/api/auth/login", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	resp, _ = http.DefaultClient.Do(req)
