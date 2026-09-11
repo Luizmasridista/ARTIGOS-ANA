@@ -11,6 +11,19 @@ function isNetworkError(e: unknown): boolean {
   return /Failed to fetch|NetworkError|network|Load failed/i.test(msg)
 }
 
+// aguardarJob espera o worker concluir o processamento do PDF (polling).
+// Lança erro 'job-falhou' se o processamento falhar, 'job-tempo' se estourar 12min.
+async function aguardarJob(jobId: number): Promise<void> {
+  const limite = Date.now() + 12 * 60 * 1000
+  for (;;) {
+    const job = await api.getJob(jobId)
+    if (job.status === 'done') return
+    if (job.status === 'failed') throw new Error('job-falhou')
+    if (Date.now() > limite) throw new Error('job-tempo')
+    await new Promise((r) => setTimeout(r, 3000))
+  }
+}
+
 const GrokBanner = lazy(() => import('./GrokBanner').then((m) => ({ default: m.GrokBanner })))
 
 interface Props {
@@ -149,6 +162,24 @@ export function Biblioteca({ onAbrirArtigo }: Props) {
       setEnviando(file.name)
       try {
         const criado = await api.criarArtigo(file)
+        // Upload é assíncrono: PDF grande processa no worker (senão estoura
+        // o timeout do proxy e o upload "trava"). Aguarda o job concluir.
+        if (criado.job_id && criado.status === 'processando') {
+          setEnviando(`Processando ${file.name}…`)
+          await aguardarJob(criado.job_id)
+          const detalhe = await api.getArtigo(criado.id)
+          const pronto = {
+            id: criado.id,
+            titulo: detalhe.titulo,
+            num_paginas: detalhe.paginas.length,
+            criado_em: criado.criado_em,
+          }
+          setEnviando(null)
+          if (user?.id) { try { await cacheArtigos(user.id, [pronto]) } catch {} }
+          await carregar(buscaDebounced)
+          onAbrirArtigo(pronto)
+          return
+        }
         setEnviando(null)
         if (user?.id) { try { await cacheArtigos(user.id, [criado]) } catch {} }
         await carregar(buscaDebounced)
@@ -156,6 +187,8 @@ export function Biblioteca({ onAbrirArtigo }: Props) {
       } catch (e) {
         setEnviando(null)
         if (isNetworkError(e)) setErroEnvio('Sem conexão — PDF não enviado. Tente quando voltar a ficar online.')
+        else if (e instanceof Error && e.message === 'job-falhou') setErroEnvio('Falha ao processar o PDF. Tente de novo ou use um arquivo menor.')
+        else if (e instanceof Error && e.message === 'job-tempo') setErroEnvio('Processamento demorou demais. Verifique a biblioteca em instantes.')
         else setErroEnvio(e instanceof Error ? e.message : 'Falha ao enviar o PDF')
       }
     },

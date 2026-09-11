@@ -51,6 +51,32 @@ async function garantirBackend() {
   throw new Error('backend e2e não subiu após 6 tentativas')
 }
 
+let COOKIE = ''
+async function loginE2E() {
+  const res = await fetch(`${API}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nome: 'Ana Bagatinii', senha: 'e2e-senha-local' }),
+  })
+  const body = await res.json().catch(() => ({}))
+  if (res.status !== 200) throw new Error(`e2e login ${res.status}: ${JSON.stringify(body)}`)
+  const sc = res.headers.getSetCookie ? res.headers.getSetCookie() : res.headers.get('set-cookie')
+  const arr = Array.isArray(sc) ? sc : [sc]
+  const m = String(arr.join(';')).match(/ana_session=([^;]+)/)
+  if (!m) throw new Error('e2e sem cookie')
+  COOKIE = `ana_session=${m[1]}`
+}
+async function aguardarJob(jobId) {
+  const fim = Date.now() + 10 * 60 * 1000
+  for (;;) {
+    const res = await fetch(`${API}/api/jobs/${jobId}`, { headers: { Cookie: COOKIE } })
+    const job = await res.json()
+    if (job.status === 'done') return job
+    if (job.status === 'failed') throw new Error(`job falhou: ${job.error || ''}`)
+    if (Date.now() > fim) throw new Error('job tempo esgotado')
+    await wait(3000)
+  }
+}
 async function uploadPDF(titulo) {
   for (let tentativa = 0; tentativa < 3; tentativa++) {
     const pdfPath = path.join(backendDir, 'testdata', 'artigo-teste.pdf')
@@ -58,9 +84,12 @@ async function uploadPDF(titulo) {
     form.append('file', new Blob([fs.readFileSync(pdfPath)], { type: 'application/pdf' }), 'artigo-teste.pdf')
     form.append('titulo', titulo)
     try {
-      const res = await fetch(`${API}/api/artigos`, { method: 'POST', body: form })
+      const res = await fetch(`${API}/api/artigos`, { method: 'POST', headers: { Cookie: COOKIE }, body: form })
       const body = await res.json()
-      if (res.status === 201) return body
+      if (res.status === 201) {
+        if (body.job_id) await aguardarJob(body.job_id)
+        return body
+      }
       throw new Error(`upload status ${res.status}: ${JSON.stringify(body)}`)
     } catch {
       await garantirBackend()
@@ -70,7 +99,7 @@ async function uploadPDF(titulo) {
 }
 
 async function camada(artigoId, pagina = 1) {
-  const res = await fetch(`${API}/api/artigos/${artigoId}/paginas/${pagina}/camada`)
+  const res = await fetch(`${API}/api/artigos/${artigoId}/paginas/${pagina}/camada`, { headers: { Cookie: COOKIE } })
   return res.json()
 }
 
@@ -122,6 +151,7 @@ function palavrasNoTraco(palavras, ax, ay, bx, by) {
 const titulo = `E2E Marcação ${Date.now()}`
 
 await garantirBackend()
+await loginE2E()
 const artigo = await uploadPDF(titulo)
 const cam = await camada(artigo.id)
 assert.ok(cam.palavras.length >= 8, 'PDF de teste deveria ter várias palavras na página 1')
@@ -140,6 +170,11 @@ try {
   if (!REAL) {
     await window.evaluate(() => localStorage.setItem('artigosAnaApiBase', 'http://127.0.0.1:8735'))
     await window.reload()
+  }
+  // login pela UI (senha obrigatória; backend e2e é local e a senha foi criada no loginE2E)
+  if (!REAL) {
+    await window.locator('input[aria-label="Senha"]').fill('e2e-senha-local')
+    await window.locator('button', { hasText: 'Entrar como Ana Bagatinii' }).click()
   }
   await window.waitForSelector('.biblioteca', { timeout: 20000 })
 
@@ -199,7 +234,7 @@ try {
     await wait(300)
   }
 
-  const marcacoesAtuais = async () => (await (await fetch(`${API}/api/artigos/${artigo.id}/marcacoes`)).json())
+  const marcacoesAtuais = async () => (await (await fetch(`${API}/api/artigos/${artigo.id}/marcacoes`, { headers: { Cookie: COOKIE } })).json())
 
   // Cenário 1: uma linha só
   {
@@ -347,7 +382,7 @@ try {
       const nova = marcacoes.find((m) => m.palavras.length === 3 && m.cor === '#FFE03B')
       assert.ok(nova, 'clicar em Nota deveria criar a marcação com a cor padrão (amarelo)')
 
-      const notas = await (await fetch(`${API}/api/artigos/${artigo.id}/notas`)).json()
+      const notas = await (await fetch(`${API}/api/artigos/${artigo.id}/notas`, { headers: { Cookie: COOKIE } })).json()
       const vinculada = notas.find((n) => n.marcacao_id === nova.id)
       assert.ok(vinculada, 'a nota criada pelo atalho deveria ficar vinculada à marcação')
 

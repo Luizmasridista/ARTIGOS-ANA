@@ -26,23 +26,35 @@ describe('Home - formatRetryAfter', () => {
 
 describe('Home - validarLoginInput', () => {
   it('vazio retorna erro 400', () => {
-    expect(validarLoginInput('')).toBe('selecione um usuário')
-    expect(validarLoginInput('   ')).toBe('selecione um usuário')
-    expect(validarLoginInput('Outro')).toBe('usuário inválido')
+    expect(validarLoginInput('', '')).toBe('selecione um usuário')
+    expect(validarLoginInput('   ', 'x')).toBe('selecione um usuário')
+    expect(validarLoginInput('Outro', 'x')).toBe('usuário inválido')
   })
   it('preenchido retorna null', () => {
-    expect(validarLoginInput('Ana Bagatinii')).toBeNull()
-    expect(validarLoginInput('Luiz')).toBeNull()
-    expect(validarLoginInput(' Ana Bagatinii ')).toBeNull()
+    expect(validarLoginInput('Ana Bagatinii', 'segredo')).toBeNull()
+    expect(validarLoginInput('Luiz', 'segredo')).toBeNull()
+    expect(validarLoginInput(' Ana Bagatinii ', 'segredo')).toBeNull()
+  })
+  it('sem senha retorna erro', () => {
+    expect(validarLoginInput('Ana Bagatinii', '')).toBe('digite a senha')
+    expect(validarLoginInput('Luiz', '')).toBe('digite a senha')
   })
 })
 
 describe('Home - mapLoginError (200/401/423)', () => {
-  it('401 mapeia para usuário inválido', () => {
-    const err = new ApiError(401, 'usuário inválido')
+  it('401 mapeia para mensagem do servidor', () => {
+    const err = new ApiError(401, 'credenciais inválidas')
     const r = mapLoginError(err)
-    expect(r.mensagem).toBe('usuário inválido')
+    expect(r.mensagem).toBe('credenciais inválidas')
     expect(r.retryAfter).toBeUndefined()
+  })
+  it('401 mostra texto do servidor', () => {
+    const err = new ApiError(401, 'credenciais inválidas')
+    expect(mapLoginError(err).mensagem).toBe('credenciais inválidas')
+  })
+  it('403 mostra texto do servidor (conta sem senha fora do PC)', () => {
+    const err = new ApiError(403, 'conta sem senha: crie a senha no PC (http://127.0.0.1:8734)')
+    expect(mapLoginError(err).mensagem).toContain('crie a senha no PC')
   })
   it('423 mapeia para muitas tentativas com retryAfter', () => {
     const err = new ApiError(423, 'muitas tentativas', 900)
@@ -90,7 +102,7 @@ describe('Home - login via api (fetch credentials:include)', () => {
       new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } }),
     )
     globalThis.fetch = fetchMock as unknown as typeof fetch
-    await api.login('Ana Bagatinii')
+    await api.login('Ana Bagatinii', 'segredo')
     expect(fetchMock).toHaveBeenCalledOnce()
     const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
     const init = call[1]
@@ -99,19 +111,19 @@ describe('Home - login via api (fetch credentials:include)', () => {
     expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json')
     const body = JSON.parse(init.body as string)
     expect(body.nome).toBe('Ana Bagatinii')
-    expect(body).not.toHaveProperty('senha')
+    expect(body.senha).toBe('segredo')
   })
 
   it('login 401 lança ApiError 401', async () => {
     globalThis.fetch = vi.fn(async () =>
-      new Response(JSON.stringify({ erro: 'usuário inválido' }), { status: 401, headers: { 'Content-Type': 'application/json' } }),
+      new Response(JSON.stringify({ erro: 'credenciais inválidas' }), { status: 401, headers: { 'Content-Type': 'application/json' } }),
     ) as unknown as typeof fetch
-    await expect(api.login('Invalido')).rejects.toThrow(ApiError)
+    await expect(api.login('Invalido', 'x')).rejects.toThrow(ApiError)
     try {
-      await api.login('Invalido')
+      await api.login('Invalido', 'x')
     } catch (e) {
       expect((e as ApiError).status).toBe(401)
-      expect((e as Error).message).toBe('usuário inválido')
+      expect((e as Error).message).toBe('credenciais inválidas')
     }
   })
 
@@ -123,7 +135,7 @@ describe('Home - login via api (fetch credentials:include)', () => {
       }),
     ) as unknown as typeof fetch
     try {
-      await api.login('Ana Bagatinii')
+      await api.login('Ana Bagatinii', 'segredo')
       expect.fail('deveria lançar 423')
     } catch (e) {
       const err = e as ApiError
