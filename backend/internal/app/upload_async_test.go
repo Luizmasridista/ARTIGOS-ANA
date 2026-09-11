@@ -39,8 +39,7 @@ func postArtigoMultipart(t *testing.T, tsURL, cookie string, filename string, co
 	return resp.StatusCode, out
 }
 
-func TestUploadAsync_RetornaJob(t *testing.T) {
-	_ = os.Setenv("ALLOW_INSECURE_COOKIE", "1")
+func TestUploadAsync_RetornaJob(t *testing.T) {	_ = os.Setenv("ALLOW_INSECURE_COOKIE", "1")
 	ts, a := newTestServer(t)
 	cookie := testLogin(t, ts)
 
@@ -213,4 +212,62 @@ func TestProcessarPDF_Sucesso_Titulo(t *testing.T) {
 		t.Fatalf("deveria 1 página veio %d", npag)
 	}
 	_, _ = a.DB.DeleteArtigo(id)
+}
+
+func TestUpload_CorpoVazio_MensagemClara(t *testing.T) {
+	_ = os.Setenv("ALLOW_INSECURE_COOKIE", "1")
+	ts, _ := newTestServer(t)
+	cookie := testLogin(t, ts)
+
+	// iPad/iCloud manda multipart com corpo vazio: mensagem acionável, não genérica
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/artigos", nil)
+	req.Header.Set("Content-Type", `multipart/form-data; boundary=----WebKitFormBoundaryTeste`)
+	req.AddCookie(&http.Cookie{Name: "ana_session", Value: cookie})
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var out map[string]string
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("corpo vazio deveria 400 veio %d", resp.StatusCode)
+	}
+	if !strings.Contains(out["erro"], "iCloud") {
+		t.Fatalf("erro deveria orientar sobre iCloud veio %q", out["erro"])
+	}
+}
+
+func TestUpload_ParteVazia_MensagemClara(t *testing.T) {
+	_ = os.Setenv("ALLOW_INSECURE_COOKIE", "1")
+	ts, _ := newTestServer(t)
+	cookie := testLogin(t, ts)
+
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	fw, err := mw.CreateFormFile("file", "vazio.pdf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// parte com 0 bytes, como iCloud não baixado
+	if _, err := fw.Write([]byte{}); err != nil {
+		t.Fatal(err)
+	}
+	_ = mw.Close()
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/artigos", &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.AddCookie(&http.Cookie{Name: "ana_session", Value: cookie})
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var out map[string]string
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("parte vazia deveria 400 veio %d", resp.StatusCode)
+	}
+	if !strings.Contains(out["erro"], "iCloud") {
+		t.Fatalf("erro deveria orientar sobre iCloud veio %q", out["erro"])
+	}
 }

@@ -46,6 +46,11 @@ func (a *App) handleListArtigos(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) handleCreateArtigo(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes)
+	if r.ContentLength == 0 {
+		log.Printf("upload corpo vazio: content-type=%q (iPad/iCloud sem download?)", r.Header.Get("Content-Type"))
+		writeErro(w, http.StatusBadRequest, "arquivo vazio: aguarde o download no iCloud concluir e tente de novo")
+		return
+	}
 	if err := r.ParseMultipartForm(16 << 20); err != nil {
 		if strings.Contains(err.Error(), "request body too large") {
 			writeErro(w, http.StatusRequestEntityTooLarge, "arquivo muito grande (limite 50MB)")
@@ -62,6 +67,11 @@ func (a *App) handleCreateArtigo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer file.Close()
+	if header.Size == 0 {
+		log.Printf("upload parte file vazia: filename=%q content-type=%q", header.Filename, header.Header.Get("Content-Type"))
+		writeErro(w, http.StatusBadRequest, "arquivo vazio: aguarde o download no iCloud concluir e tente de novo")
+		return
+	}
 	// valida extensão e content-type
 	ct := header.Header.Get("Content-Type")
 	if ct != "" && ct != "application/pdf" && ct != "application/octet-stream" && !strings.Contains(ct, "pdf") {
