@@ -29,7 +29,7 @@ export interface AuthUser {
 interface AuthContextValue {
   user: AuthUser | null
   loading: boolean
-  login: (nome: string) => Promise<void>
+  login: (nome: string, senha: string) => Promise<void>
   logout: () => Promise<void>
   refresh: () => Promise<void>
 }
@@ -101,8 +101,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => setUnauthorizedHandler(null)
   }, [])
 
-  const login = useCallback(async (nome: string) => {
-    await api.login(nome)
+  const login = useCallback(async (nome: string, senha: string) => {
+    await api.login(nome, senha)
     const me = await api.me()
     if (!me) throw new Error('Falha ao verificar sessão')
     setUser({ id: me.id, nome: me.nome })

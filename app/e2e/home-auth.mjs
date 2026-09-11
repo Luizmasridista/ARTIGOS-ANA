@@ -63,7 +63,7 @@ function parseSetCookie(header) {
 
 async function login(nome, senha, ip) {
   const headers = { 'Content-Type': 'application/json' }
-  if (ip) headers['X-Forwarded-For'] = ip
+  if (ip) headers['CF-Connecting-IP'] = ip
   const res = await fetch(`${API}/api/auth/login`, {
     method: 'POST',
     headers,
@@ -80,7 +80,7 @@ async function login(nome, senha, ip) {
 async function me(cookie, ip) {
   const headers = {}
   if (cookie) headers['Cookie'] = cookie
-  if (ip) headers['X-Forwarded-For'] = ip
+  if (ip) headers['CF-Connecting-IP'] = ip
   const res = await fetch(`${API}/api/auth/me`, { headers })
   const body = await res.json().catch(() => null)
   return { res, body }
@@ -89,7 +89,7 @@ async function me(cookie, ip) {
 async function artigos(cookie, ip) {
   const headers = {}
   if (cookie) headers['Cookie'] = cookie
-  if (ip) headers['X-Forwarded-For'] = ip
+  if (ip) headers['CF-Connecting-IP'] = ip
   const res = await fetch(`${API}/api/artigos`, { headers })
   return res
 }

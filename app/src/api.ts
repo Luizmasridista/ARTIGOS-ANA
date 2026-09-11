@@ -33,6 +33,21 @@ export interface ArtigoResumo {
   criado_em: string
 }
 
+// Resposta do upload: processamento é assíncrono (worker). Quando o PDF é
+// grande, status vem "processando" com job_id — consultar getJob até concluído.
+export interface ArtigoCriado extends ArtigoResumo {
+  status?: string
+  job_id?: number
+}
+
+export interface JobStatus {
+  id: number
+  tipo: string
+  status: string
+  result?: unknown
+  error?: string
+}
+
 export interface PaginaInfo {
   numero: number
   largura: number
@@ -309,12 +324,12 @@ export const api = {
   health: () => request<HealthInfo>('/api/health'),
   healthFallback: () => request<HealthInfo>('/health'),
 
-  login: (nome: string) => {
+  login: (nome: string, senha: string) => {
     console.log('[api] login', { nome, apiBase: API_BASE, path: '/api/auth/login' })
     return request<{ ok: true; token?: string }>('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nome }),
+      body: JSON.stringify({ nome, senha }),
       credentials: 'include',
     })
       .then((r) => {
@@ -355,8 +370,9 @@ export const api = {
     const form = new FormData()
     form.append('file', file)
     if (titulo) form.append('titulo', titulo)
-    return request<ArtigoResumo>('/api/artigos', { method: 'POST', body: form })
+    return request<ArtigoCriado>('/api/artigos', { method: 'POST', body: form })
   },
+  getJob: (id: number) => request<JobStatus>(`/api/jobs/${id}`),
   getArtigo: (id: number) => request<ArtigoDetalhe>(`/api/artigos/${id}`),
   deletarArtigo: (id: number) => request<void>(`/api/artigos/${id}`, { method: 'DELETE' }),
   excluirLote: (ids: number[]) =>
