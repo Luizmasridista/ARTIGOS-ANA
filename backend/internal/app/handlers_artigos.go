@@ -51,11 +51,13 @@ func (a *App) handleCreateArtigo(w http.ResponseWriter, r *http.Request) {
 			writeErro(w, http.StatusRequestEntityTooLarge, "arquivo muito grande (limite 50MB)")
 			return
 		}
+		log.Printf("upload sem campo file: content-type=%q content-length=%d err=%v", r.Header.Get("Content-Type"), r.ContentLength, err)
 		writeErro(w, http.StatusBadRequest, `campo "file" obrigatório`)
 		return
 	}
 	file, header, err := r.FormFile("file")
 	if err != nil {
+		log.Printf("upload FormFile file erro: content-type=%q err=%v", r.Header.Get("Content-Type"), err)
 		writeErro(w, http.StatusBadRequest, `campo "file" obrigatório`)
 		return
 	}
@@ -85,11 +87,14 @@ func (a *App) handleCreateArtigo(w http.ResponseWriter, r *http.Request) {
 		writeErro(w, http.StatusBadRequest, "título muito longo (máx 300 caracteres)")
 		return
 	}
+	tituloProvisorio := false
 	if titulo == "" {
 		titulo = strings.TrimSuffix(header.Filename, filepath.Ext(header.Filename))
+		tituloProvisorio = true
 	}
 	if titulo == "" {
 		titulo = "Artigo sem título"
+		tituloProvisorio = true
 	}
 	// sanitiza título para evitar injeção
 	titulo = strings.ReplaceAll(titulo, "\n", " ")
@@ -97,6 +102,7 @@ func (a *App) handleCreateArtigo(w http.ResponseWriter, r *http.Request) {
 	titulo = strings.TrimSpace(titulo)
 	if titulo == "" {
 		titulo = "Artigo sem título"
+		tituloProvisorio = true
 	}
 
 	tmp, err := os.CreateTemp(a.tmpDir, "upload-*.pdf")
@@ -130,8 +136,9 @@ func (a *App) handleCreateArtigo(w http.ResponseWriter, r *http.Request) {
 		writeErro(w, http.StatusInternalServerError, "falha ao gravar o PDF")
 		return
 	}
-	_ = a.DB.SetArtigoPDF(id, "pdfs/"+fmt.Sprintf("%d.pdf", id))
-	// Neon persistencia: salva pdf bytes em BYTEA para sobreviver ao disco efemero do Render Free
+	// Neon persistencia: salva pdf bytes em BYTEA para sobreviver ao disco efemero do Render Free.
+	// O processamento pesado (páginas) roda no worker — a resposta volta rápido,
+	// senão PDF grande estoura o timeout do proxy (100s Cloudflare) e o upload "trava".
 	if pdfBytes, err := os.ReadFile(finalPDF); err == nil {
 		if err := a.DB.SetArtigoPdfData(id, pdfBytes); err != nil {
 			log.Printf("aviso: falha ao persistir pdf_data no Neon para artigo %d: %v", id, err)
@@ -140,17 +147,73 @@ func (a *App) handleCreateArtigo(w http.ResponseWriter, r *http.Request) {
 		log.Printf("aviso: falha ao ler pdf para persistir no DB artigo %d: %v", id, err)
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Minute)
-	defer cancel()
-	pagesDir := a.paginasPath(id)
-	pages, err := pdf.Extract(ctx, a.PopplerDir, a.DataDir, finalPDF, pagesDir)
+	payload, _ := json.Marshal(map[string]any{"artigo_id": id, "titulo_provisorio": tituloProvisorio})
+	job, err := a.DB.EnqueueJob(uid, "processar_pdf", payload)
 	if err != nil {
-		log.Printf("extracao falhou para artigo %d: %v", id, err)
+		log.Printf("falha ao enfileirar processamento artigo %d: %v", id, err)
 		a.DB.DeleteArtigo(id)
 		os.Remove(finalPDF)
-		os.RemoveAll(pagesDir)
-		writeErro(w, http.StatusInternalServerError, "falha ao processar o PDF")
+		writeErro(w, http.StatusInternalServerError, "falha ao enfileirar processamento")
 		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"id":          id,
+		"titulo":      titulo,
+		"criado_em":   criadoEm,
+		"num_paginas": 0,
+		"status":      "processando",
+		"job_id":      job.ID,
+	})
+}
+
+// processarPDFJob executa o job "processar_pdf" no worker (fora da requisição).
+func (a *App) processarPDFJob(j *store.Job) error {
+	var in struct {
+		ArtigoID         int64 `json:"artigo_id"`
+		TituloProvisorio bool  `json:"titulo_provisorio"`
+	}
+	if err := json.Unmarshal(j.Payload, &in); err != nil || in.ArtigoID <= 0 {
+		return fmt.Errorf("payload inválido: %s", string(j.Payload))
+	}
+	return a.processarPDF(in.ArtigoID, j.UsuarioID, in.TituloProvisorio)
+}
+
+// processarPDF extrai páginas, persiste imagens, define o título do paper e
+// varre citações. Em falha definitiva, remove o artigo (como o upload síncrono fazia).
+func (a *App) processarPDF(artigoID, uid int64, tituloProvisorio bool) error {
+	artigo, found, err := a.DB.GetArtigoByUser(artigoID, uid)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return fmt.Errorf("artigo %d não encontrado para o usuário %d", artigoID, uid)
+	}
+	finalPDF := a.pdfPath(artigoID)
+	// garante o PDF no disco a partir do BYTEA (disco efêmero do Render pode ter apagado)
+	if _, err := os.Stat(finalPDF); err != nil {
+		data, found, err := a.DB.GetArtigoPdfData(artigoID)
+		if err != nil || !found || len(data) == 0 {
+			return fmt.Errorf("pdf do artigo %d indisponível", artigoID)
+		}
+		if err := os.MkdirAll(filepath.Dir(finalPDF), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(finalPDF, data, 0o644); err != nil {
+			return err
+		}
+	}
+	_ = a.DB.SetArtigoPDF(artigoID, "pdfs/"+fmt.Sprintf("%d.pdf", artigoID))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	pagesDir := a.paginasPath(artigoID)
+	pages, err := pdf.Extract(ctx, a.PopplerDir, a.DataDir, finalPDF, pagesDir)
+	if err != nil {
+		log.Printf("extracao falhou para artigo %d: %v", artigoID, err)
+		a.DB.DeleteArtigo(artigoID)
+		os.Remove(finalPDF)
+		os.RemoveAll(pagesDir)
+		return fmt.Errorf("falha ao processar o PDF: %v", err)
 	}
 
 	for _, p := range pages {
@@ -158,35 +221,82 @@ func (a *App) handleCreateArtigo(w http.ResponseWriter, r *http.Request) {
 		if wordsJSON == nil {
 			wordsJSON = []byte("[]")
 		}
-		relImg := fmt.Sprintf("paginas/%d/%d.png", id, p.Numero)
-		if err := a.DB.AddPagina(id, p.Numero, relImg, wordsJSON, p.WidthPx, p.HeightPx); err != nil {
-			a.DB.DeleteArtigo(id)
+		relImg := fmt.Sprintf("paginas/%d/%d.png", artigoID, p.Numero)
+		if err := a.DB.AddPagina(artigoID, p.Numero, relImg, wordsJSON, p.WidthPx, p.HeightPx); err != nil {
+			a.DB.DeleteArtigo(artigoID)
 			os.Remove(finalPDF)
 			os.RemoveAll(pagesDir)
-			writeErro(w, http.StatusInternalServerError, "falha ao registrar páginas")
-			return
+			return fmt.Errorf("falha ao registrar páginas: %v", err)
 		}
 		// Neon persistencia: salva PNG bytes em BYTEA (fallback se disco for apagado no Render)
 		if pngBytes, err := os.ReadFile(p.PNGPath); err == nil {
-			if err := a.DB.SetPaginaImagemData(id, p.Numero, pngBytes); err != nil {
-				log.Printf("aviso: falha ao persistir imagem_data pagina %d artigo %d: %v", p.Numero, id, err)
+			if err := a.DB.SetPaginaImagemData(artigoID, p.Numero, pngBytes); err != nil {
+				log.Printf("aviso: falha ao persistir imagem_data pagina %d artigo %d: %v", p.Numero, artigoID, err)
 			}
 		} else {
-			log.Printf("aviso: falha ao ler PNG pagina %d artigo %d para DB: %v", p.Numero, id, err)
+			log.Printf("aviso: falha ao ler PNG pagina %d artigo %d para DB: %v", p.Numero, artigoID, err)
 		}
 	}
 
-	// Extração automática de citações (best-effort, não falha o upload)
-	if _, err := a.executarVarrerCitacoes(id); err != nil {
-		log.Printf("varrer citacoes automatico falhou para artigo %d: %v", id, err)
+	// Título do paper: se veio provisório (nome do arquivo), extrai da 1ª página.
+	if tituloProvisorio {
+		if t := a.extrairTituloPaper(finalPDF); t != "" {
+			if err := a.DB.SetArtigoTitulo(artigoID, t); err != nil {
+				log.Printf("aviso: falha ao gravar título do artigo %d: %v", artigoID, err)
+			} else {
+				artigo.Titulo = t
+			}
+		}
 	}
 
-	writeJSON(w, http.StatusCreated, store.Artigo{
-		ID:         id,
-		Titulo:     titulo,
-		NumPaginas: len(pages),
-		CriadoEm:   criadoEm,
-	})
+	// Extração automática de citações (best-effort, não falha o job)
+	if _, err := a.executarVarrerCitacoes(artigoID); err != nil {
+		log.Printf("varrer citacoes automatico falhou para artigo %d: %v", artigoID, err)
+	}
+	return nil
+}
+
+// extrairTituloPaper devolve o título do paper a partir do texto da 1ª página.
+// Heurística: primeira linha substancial que não parece cabeçalho (doi, vol, url).
+// Retorna "" se não achar nada confiável (mantém o título provisório).
+func (a *App) extrairTituloPaper(pdfPath string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	texto, err := pdf.RunPdfToTextPlain(ctx, a.PopplerDir, a.DataDir, pdfPath, 1)
+	if err != nil || strings.TrimSpace(texto) == "" {
+		return ""
+	}
+	return extrairTituloDeTexto(texto)
+}
+
+func extrairTituloDeTexto(texto string) string {
+	checked := 0
+	for _, ln := range strings.Split(texto, "\n") {
+		ln = strings.Join(strings.Fields(ln), " ")
+		if ln == "" {
+			continue
+		}
+		checked++
+		if checked > 12 {
+			break
+		}
+		low := strings.ToLower(ln)
+		// pula cabeçalho típico de periódico
+		if strings.Contains(low, "doi") || strings.Contains(low, "http") ||
+			strings.Contains(low, "vol.") || strings.Contains(low, "pp. ") ||
+			strings.HasPrefix(low, "página ") || strings.HasPrefix(low, "page ") {
+			continue
+		}
+		if len([]rune(ln)) < 20 {
+			continue
+		}
+		r := []rune(ln)
+		if len(r) > 200 {
+			ln = strings.TrimSpace(string(r[:200]))
+		}
+		return ln
+	}
+	return ""
 }
 
 func (a *App) handleGetArtigo(w http.ResponseWriter, r *http.Request) {

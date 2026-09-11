@@ -2,6 +2,7 @@ package app
 
 import (
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"log"
@@ -155,6 +156,49 @@ func (a *App) hashSerial(serial string) string {
 	return hex.EncodeToString(h[:])
 }
 
+// hashDeviceToken deriva o identificador gravado para um device token.
+// O token em claro NUNCA é persistido: vazar o banco não vaza acesso.
+// Verificação compara hash(apresentado) com o gravado — roubar o hash
+// não adianta (pass-the-hash não funciona, pois o apresentado é hasheado).
+func (a *App) hashDeviceToken(token string) string {
+	secret := strings.TrimSpace(os.Getenv("JWT_SECRET"))
+	if secret == "" {
+		secret = string(a.JWTSecret)
+	}
+	sum := sha256.Sum256([]byte("device-token-v1:" + strings.TrimSpace(token) + ":" + secret))
+	return hex.EncodeToString(sum[:])
+}
+
+// isTokenAllowlisted compara o token apresentado com a allowlist de env
+// por hash (tempo constante). Os valores no env continuam em claro para
+// operação, mas a comparação nunca encosta no token em claro do banco.
+func (a *App) isTokenAllowlisted(token string, list []string) bool {
+	if strings.TrimSpace(token) == "" || len(list) == 0 {
+		return false
+	}
+	want := a.hashDeviceToken(token)
+	for _, entry := range list {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		cand := a.hashDeviceToken(entry)
+		if subtle.ConstantTimeCompare([]byte(want), []byte(cand)) == 1 {
+			return true
+		}
+	}
+	return false
+}
+
+// isDeviceTokenAutorizado verifica o token pelo hash gravado.
+func (a *App) isDeviceTokenAutorizado(token string) bool {
+	if a.DB == nil || strings.TrimSpace(token) == "" {
+		return false
+	}
+	ok, err := a.DB.IsDispositivoAutorizado(a.hashDeviceToken(token), "device_token")
+	return err == nil && ok
+}
+
 // governancaMiddleware bloqueia acesso nao autorizado por IP ou device token.
 // Excecoes: /health e /api/health sempre publicos (Render healthcheck),
 // /api/governanca/status provisório debug sempre passa (auth ainda exige login),
@@ -210,9 +254,9 @@ func (a *App) governancaMiddleware(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		// 2) device token na env allowlist
-		if deviceId != "" && isIPInAllowlist(deviceId, allowedTokens) {
-			// isIPInAllowlist faz comparacao exata para tokens tambem
+		// 2) device token na env allowlist (comparação por hash)
+		if a.isTokenAllowlisted(deviceId, allowedTokens) {
+			// isTokenAllowlisted compara hashes para tokens tambem
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -224,12 +268,12 @@ func (a *App) governancaMiddleware(next http.Handler) http.Handler {
 					return
 				}
 			}
-			if deviceId != "" {
-				if ok, err := a.DB.IsDeviceTokenAutorizado(deviceId); err == nil && ok {
-					next.ServeHTTP(w, r)
-					return
-				}
+		if deviceId != "" {
+			if a.isDeviceTokenAutorizado(deviceId) {
+				next.ServeHTTP(w, r)
+				return
 			}
+		}
 			if serialHashHeader != "" {
 				if ok, err := a.DB.IsDispositivoAutorizado(serialHashHeader, "serial_hash"); err == nil && ok {
 					next.ServeHTTP(w, r)
@@ -309,7 +353,7 @@ func (a *App) handleGovernancaRegistrar(w http.ResponseWriter, r *http.Request) 
 			writeErro(w, http.StatusBadRequest, "deviceId inválido")
 			return
 		}
-		if err := a.DB.EnsureDispositivoAutorizado(deviceId, "device_token", "registrado via governanca ip="+maskIP(clientIP(r))); err != nil {
+		if err := a.DB.EnsureDispositivoAutorizado(a.hashDeviceToken(deviceId), "device_token", "registrado via governanca ip="+maskIP(clientIP(r))); err != nil {
 			writeErro(w, http.StatusInternalServerError, "falha ao registrar dispositivo")
 			return
 		}
@@ -425,13 +469,13 @@ func (a *App) handleGovernancaStatus(w http.ResponseWriter, r *http.Request) {
 		via = "permissivo (GOVERNANCE_ENFORCE=0 ou BIND_ADDR != 0.0.0.0)"
 	} else if isIPInAllowlist(ip, allowedIPs) {
 		via = "ip env"
-	} else if deviceId != "" && isIPInAllowlist(deviceId, allowedTokens) {
+	} else if deviceId != "" && a.isTokenAllowlisted(deviceId, allowedTokens) {
 		via = "device env"
 	} else if a.DB != nil {
 		if ok, _ := a.DB.IsIPAutorizado(ip); ok {
 			via = "ip tabela"
 		} else if deviceId != "" {
-			if ok, _ := a.DB.IsDeviceTokenAutorizado(deviceId); ok {
+			if a.isDeviceTokenAutorizado(deviceId) {
 				via = "device tabela"
 			}
 		}

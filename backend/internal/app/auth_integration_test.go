@@ -16,7 +16,7 @@ func TestAuth_Login_Sucesso_Falha_Lock(t *testing.T) {
 	ts, _ := newTestServer(t)
 
 	// login correto já funciona via testLogin, mas testa endpoint diretamente
-	body, _ := json.Marshal(map[string]string{"nome": "Ana Bagatinii"})
+	body, _ := json.Marshal(map[string]string{"nome": "Ana Bagatinii", "senha": testSenha})
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/auth/login", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
@@ -88,8 +88,8 @@ func TestAuth_Login_Falha_401(t *testing.T) {
 	body, _ := json.Marshal(map[string]string{"nome": "Invalido"})
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/auth/login", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	// usa IP diferente via X-Forwarded-For para isolar?
-	req.Header.Set("X-Forwarded-For", "1.2.3.4")
+	// usa IP diferente via CF-Connecting-IP para isolar?
+	req.Header.Set("CF-Connecting-IP", "1.2.3.4")
 	resp, _ := http.DefaultClient.Do(req)
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusUnauthorized {
@@ -113,7 +113,7 @@ func TestAuth_RateLimit_5_423(t *testing.T) {
 		body, _ := json.Marshal(map[string]string{"nome": "Invalido"})
 		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/auth/login", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("X-Forwarded-For", ip)
+		req.Header.Set("CF-Connecting-IP", ip)
 		resp, _ := http.DefaultClient.Do(req)
 		resp.Body.Close()
 		if resp.StatusCode != http.StatusUnauthorized {
@@ -124,7 +124,7 @@ func TestAuth_RateLimit_5_423(t *testing.T) {
 	body, _ := json.Marshal(map[string]string{"nome": "Invalido"})
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/auth/login", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Forwarded-For", ip)
+	req.Header.Set("CF-Connecting-IP", ip)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -146,10 +146,10 @@ func TestAuth_RateLimit_5_423(t *testing.T) {
 		t.Errorf("retryAfter 900 esperado veio %v", out["retryAfter"])
 	}
 	// mesmo com usuário válido, ainda bloqueado
-	body, _ = json.Marshal(map[string]string{"nome": "Ana Bagatinii"})
+	body, _ = json.Marshal(map[string]string{"nome": "Ana Bagatinii", "senha": testSenha})
 	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/api/auth/login", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Forwarded-For", ip)
+	req.Header.Set("CF-Connecting-IP", ip)
 	resp2, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -169,7 +169,7 @@ func TestAuth_RateLimit_Persistencia_PG(t *testing.T) {
 		body, _ := json.Marshal(map[string]string{"nome": "Invalido"})
 		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/auth/login", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("X-Forwarded-For", ip)
+		req.Header.Set("CF-Connecting-IP", ip)
 		resp, _ := http.DefaultClient.Do(req)
 		resp.Body.Close()
 	}
@@ -184,7 +184,7 @@ func TestAuth_RateLimit_Persistencia_PG(t *testing.T) {
 	body, _ := json.Marshal(map[string]string{"nome": "Invalido"})
 	req, _ := http.NewRequest(http.MethodPost, ts2.URL+"/api/auth/login", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Forwarded-For", ip)
+	req.Header.Set("CF-Connecting-IP", ip)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -355,6 +355,91 @@ func TestCORS_Fechado(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("OPTIONS deveria 204 veio %d", resp.StatusCode)
+	}
+}
+
+func TestAuth_Senha_Enroll_Verify_Remoto(t *testing.T) {
+	_ = os.Setenv("ALLOW_INSECURE_COOKIE", "1")
+	ts, a := newTestServer(t)
+
+	luiz, err := a.DB.GetUsuarioByNome("Luiz")
+	if err != nil || luiz == nil {
+		t.Fatalf("seed Luiz ausente: %v", err)
+	}
+	// parte de senha vazia e garante vazio no fim (outros testes usam Ana)
+	if err := a.DB.SetUsuarioSenha(luiz.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = a.DB.SetUsuarioSenha(luiz.ID, "") }()
+
+	postLogin := func(body any, remoteAddr string, setHeaders func(*http.Request)) (int, []byte) {
+		b, _ := json.Marshal(body)
+		var raw []byte
+		if remoteAddr == "" {
+			req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/auth/login", bytes.NewReader(b))
+			req.Header.Set("Content-Type", "application/json")
+			if setHeaders != nil {
+				setHeaders(req)
+			}
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("login request: %v", err)
+			}
+			defer resp.Body.Close()
+			raw, _ = io.ReadAll(resp.Body)
+			return resp.StatusCode, raw
+		}
+		req, _ := http.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader(b))
+		req.Header.Set("Content-Type", "application/json")
+		req.RemoteAddr = remoteAddr
+		if setHeaders != nil {
+			setHeaders(req)
+		}
+		rr := httptest.NewRecorder()
+		a.Routes().ServeHTTP(rr, req)
+		return rr.Code, rr.Body.Bytes()
+	}
+
+	// 1) conta sem senha, fora do PC: nega (ninguém sequestra a conta)
+	code, raw := postLogin(map[string]string{"nome": "Luiz", "senha": "qualquer"}, "203.0.113.9:4567", nil)
+	if code != http.StatusForbidden {
+		t.Fatalf("enroll remoto deveria 403 veio %d corpo %s", code, raw)
+	}
+
+	// 2) no PC (loopback httptest), primeira vez com senha curta: 400
+	code, _ = postLogin(map[string]string{"nome": "Luiz", "senha": "abc"}, "", nil)
+	if code != http.StatusBadRequest {
+		t.Fatalf("senha curta deveria 400 veio %d", code)
+	}
+
+	// 3) no PC com senha válida: cria e entra 200
+	code, raw = postLogin(map[string]string{"nome": "Luiz", "senha": "nova-senha-luiz"}, "", nil)
+	if code != http.StatusOK {
+		t.Fatalf("enroll deveria 200 veio %d corpo %s", code, raw)
+	}
+	if strings.Contains(string(raw), "senha_hash") {
+		t.Fatalf("login vazou hash %s", raw)
+	}
+
+	// 4) senha errada: 401
+	code, _ = postLogin(map[string]string{"nome": "Luiz", "senha": "errada"}, "", nil)
+	if code != http.StatusUnauthorized {
+		t.Fatalf("senha errada deveria 401 veio %d", code)
+	}
+
+	// 5) senha certa: 200 (e reseta rate limit)
+	code, _ = postLogin(map[string]string{"nome": "Luiz", "senha": "nova-senha-luiz"}, "", nil)
+	if code != http.StatusOK {
+		t.Fatalf("senha certa deveria 200 veio %d", code)
+	}
+
+	// 6) hash bcrypt persistido, nunca em claro
+	u2, _ := a.DB.GetUsuarioByNome("Luiz")
+	if u2 == nil || u2.SenhaHash == "" || u2.SenhaHash == "nova-senha-luiz" {
+		t.Fatalf("hash bcrypt deveria estar gravado")
+	}
+	if len(u2.SenhaHash) < 50 || u2.SenhaHash[:4] != "$2a$" {
+		t.Fatalf("hash deveria ser bcrypt, veio %q", u2.SenhaHash[:4])
 	}
 }
 

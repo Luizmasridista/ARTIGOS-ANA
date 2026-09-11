@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
@@ -38,14 +39,14 @@ func TestGovernanca_Health_Bypass_MesmoBloqueado(t *testing.T) {
 	_, _ = a.DB.DB().Exec(`DELETE FROM dispositivos_autorizados`)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/health", nil)
-	req.Header.Set("X-Forwarded-For", "9.9.9.9")
+	req.Header.Set("CF-Connecting-IP", "9.9.9.9")
 	resp := doReq(t, req)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("health sem IP autorizado deveria 200 (enforce), veio %d", resp.StatusCode)
 	}
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/health", nil)
-	req.Header.Set("X-Forwarded-For", "9.9.9.9")
+	req.Header.Set("CF-Connecting-IP", "9.9.9.9")
 	resp2 := doReq(t, req)
 	defer resp2.Body.Close()
 	if resp2.StatusCode != http.StatusOK {
@@ -75,7 +76,7 @@ func TestGovernanca_BloqueioEAllowIP(t *testing.T) {
 	cookie := testLogin(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/artigos", nil)
-	req.Header.Set("X-Forwarded-For", "8.8.8.8")
+	req.Header.Set("CF-Connecting-IP", "8.8.8.8")
 	req.AddCookie(&http.Cookie{Name: "ana_session", Value: cookie})
 	resp := doReq(t, req)
 	defer resp.Body.Close()
@@ -89,7 +90,7 @@ func TestGovernanca_BloqueioEAllowIP(t *testing.T) {
 	}
 
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/artigos", nil)
-	req.Header.Set("X-Forwarded-For", "192.168.0.94")
+	req.Header.Set("CF-Connecting-IP", "192.168.0.94")
 	req.AddCookie(&http.Cookie{Name: "ana_session", Value: cookie})
 	resp2 := doReq(t, req)
 	defer resp2.Body.Close()
@@ -98,7 +99,7 @@ func TestGovernanca_BloqueioEAllowIP(t *testing.T) {
 	}
 
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/artigos", nil)
-	req.Header.Set("X-Forwarded-For", "189.6.213.149")
+	req.Header.Set("CF-Connecting-IP", "189.6.213.149")
 	req.AddCookie(&http.Cookie{Name: "ana_session", Value: cookie})
 	resp3 := doReq(t, req)
 	defer resp3.Body.Close()
@@ -107,12 +108,78 @@ func TestGovernanca_BloqueioEAllowIP(t *testing.T) {
 	}
 
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/artigos", nil)
-	req.Header.Set("X-Forwarded-For", "192.168.0.94, 10.0.0.1, 70.41.3.18")
+	req.Header.Set("CF-Connecting-IP", "192.168.0.94")
 	req.AddCookie(&http.Cookie{Name: "ana_session", Value: cookie})
 	resp4 := doReq(t, req)
 	defer resp4.Body.Close()
 	if resp4.StatusCode != http.StatusOK {
-		t.Fatalf("XFF multiplo deveria 200 veio %d", resp4.StatusCode)
+		t.Fatalf("CF-Connecting-IP autorizado deveria 200 veio %d", resp4.StatusCode)
+	}
+}
+
+func TestGovernanca_XFF_Spoof_Ignorado(t *testing.T) {
+	// X-Forwarded-For é controlado pelo cliente: forjar o IP da allowlist
+	// NÃO pode liberar. Só CF-Connecting-IP (edge) vale.
+	origEnforce := os.Getenv("GOVERNANCE_ENFORCE")
+	origBind := os.Getenv("BIND_ADDR")
+	origIPs := os.Getenv("ALLOWED_IPS")
+	origTokens := os.Getenv("ALLOWED_DEVICE_TOKENS")
+	defer func() {
+		_ = os.Setenv("GOVERNANCE_ENFORCE", origEnforce)
+		_ = os.Setenv("BIND_ADDR", origBind)
+		_ = os.Setenv("ALLOWED_IPS", origIPs)
+		_ = os.Setenv("ALLOWED_DEVICE_TOKENS", origTokens)
+	}()
+	_ = os.Setenv("GOVERNANCE_ENFORCE", "1")
+	_ = os.Setenv("BIND_ADDR", "0.0.0.0")
+	_ = os.Setenv("ALLOWED_IPS", "189.6.213.149")
+	_ = os.Setenv("ALLOWED_DEVICE_TOKENS", "")
+
+	ts, a := newTestServer(t)
+	_, _ = a.DB.DB().Exec(`DELETE FROM dispositivos_autorizados`)
+	cookie := testLogin(t, ts)
+
+	// 1) XFF forjado com IP permitido, sem CF: RemoteAddr é 127.0.0.1 (httptest)
+	// mas o caminho de enforcement usa o IP extraído; XFF deve ser ignorado.
+	// Como RemoteAddr aqui é loopback, o bypass local permite — então simula
+	// origem remota chamando o handler direto com RemoteAddr controlado.
+	serve := func(remoteAddr string, setHeaders func(*http.Request)) int {
+		req, _ := http.NewRequest(http.MethodGet, "/api/artigos", nil)
+		req.RemoteAddr = remoteAddr
+		req.AddCookie(&http.Cookie{Name: "ana_session", Value: cookie})
+		if setHeaders != nil {
+			setHeaders(req)
+		}
+		rr := httptest.NewRecorder()
+		a.Routes().ServeHTTP(rr, req)
+		return rr.Code
+	}
+	if code := serve("9.9.9.9:1234", func(r *http.Request) {
+		r.Header.Set("X-Forwarded-For", "189.6.213.149")
+	}); code != http.StatusForbidden {
+		t.Fatalf("XFF forjado deveria 403 veio %d", code)
+	}
+	// 2) CF-Connecting-IP permitido libera (edge garante)
+	if code := serve("9.9.9.9:1234", func(r *http.Request) {
+		r.Header.Set("X-Forwarded-For", "1.1.1.1")
+		r.Header.Set("CF-Connecting-IP", "189.6.213.149")
+	}); code != http.StatusOK {
+		t.Fatalf("CF permitido deveria 200 veio %d", code)
+	}
+	// 3) CF diferente bloqueia mesmo com XFF permitido
+	if code := serve("9.9.9.9:1234", func(r *http.Request) {
+		r.Header.Set("X-Forwarded-For", "189.6.213.149")
+		r.Header.Set("CF-Connecting-IP", "8.8.8.8")
+	}); code != http.StatusForbidden {
+		t.Fatalf("CF não autorizado deveria 403 veio %d", code)
+	}
+	// 4) CF-Connecting-IP vale mesmo em conexão direta: no túnel o RemoteAddr
+	// é sempre loopback (só o cloudflared local alcança o backend) e no Render
+	// o tráfego chega via Cloudflare — a edge sobrescreve esse cabeçalho.
+	if code := serve("9.9.9.9:1234", func(r *http.Request) {
+		r.Header.Set("CF-Connecting-IP", "189.6.213.149")
+	}); code != http.StatusOK {
+		t.Fatalf("CF permitido via direta deveria 200 veio %d", code)
 	}
 }
 
@@ -138,7 +205,7 @@ func TestGovernanca_Allow_DeviceToken_EnvETabela(t *testing.T) {
 	cookie := testLogin(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/artigos", nil)
-	req.Header.Set("X-Forwarded-For", "8.8.8.8")
+	req.Header.Set("CF-Connecting-IP", "8.8.8.8")
 	req.AddCookie(&http.Cookie{Name: "ana_session", Value: cookie})
 	resp := doReq(t, req)
 	resp.Body.Close()
@@ -146,7 +213,7 @@ func TestGovernanca_Allow_DeviceToken_EnvETabela(t *testing.T) {
 		t.Fatalf("sem token deveria 403 veio %d", resp.StatusCode)
 	}
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/artigos", nil)
-	req.Header.Set("X-Forwarded-For", "8.8.8.8")
+	req.Header.Set("CF-Connecting-IP", "8.8.8.8")
 	req.Header.Set("X-Device-Id", "dev-token-abc-123")
 	req.AddCookie(&http.Cookie{Name: "ana_session", Value: cookie})
 	resp2 := doReq(t, req)
@@ -156,11 +223,12 @@ func TestGovernanca_Allow_DeviceToken_EnvETabela(t *testing.T) {
 	}
 
 	_ = os.Setenv("ALLOWED_DEVICE_TOKENS", "")
-	if err := a.DB.EnsureDispositivoAutorizado("dev-token-tabela-xyz", "device_token", "ipad"); err != nil {
+	// via tabela: registra-se o HASH (caminho de produção: registrar hasheia)
+	if err := a.DB.EnsureDispositivoAutorizado(a.hashDeviceToken("dev-token-tabela-xyz"), "device_token", "ipad"); err != nil {
 		t.Fatal(err)
 	}
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/artigos", nil)
-	req.Header.Set("X-Forwarded-For", "8.8.8.8")
+	req.Header.Set("CF-Connecting-IP", "8.8.8.8")
 	req.Header.Set("X-Device-Id", "dev-token-tabela-xyz")
 	req.AddCookie(&http.Cookie{Name: "ana_session", Value: cookie})
 	resp3 := doReq(t, req)
@@ -169,7 +237,7 @@ func TestGovernanca_Allow_DeviceToken_EnvETabela(t *testing.T) {
 		t.Fatalf("token tabela autorizado deveria 200 veio %d", resp3.StatusCode)
 	}
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/artigos", nil)
-	req.Header.Set("X-Forwarded-For", "8.8.8.8")
+	req.Header.Set("CF-Connecting-IP", "8.8.8.8")
 	req.Header.Set("X-Device-Token", "dev-token-tabela-xyz")
 	req.AddCookie(&http.Cookie{Name: "ana_session", Value: cookie})
 	resp4 := doReq(t, req)
@@ -209,7 +277,7 @@ func TestGovernanca_Registrar_Listar(t *testing.T) {
 	b, _ := json.Marshal(payload)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/governanca/registrar", bytes.NewReader(b))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Forwarded-For", "10.0.0.1")
+	req.Header.Set("CF-Connecting-IP", "10.0.0.1")
 	req.AddCookie(&http.Cookie{Name: "ana_session", Value: cookie})
 	resp := doReq(t, req)
 	defer resp.Body.Close()
@@ -219,9 +287,29 @@ func TestGovernanca_Registrar_Listar(t *testing.T) {
 		t.Fatalf("registrar deveria 200 veio %d corpo %s", resp.StatusCode, buf.String())
 	}
 
-	ok, _ := a.DB.IsDeviceTokenAutorizado("dev-teste-uuid-1234")
+	ok, _ := a.DB.IsDispositivoAutorizado(a.hashDeviceToken("dev-teste-uuid-1234"), "device_token")
 	if !ok {
 		t.Fatalf("device token deveria estar autorizado apos registrar")
+	}
+	// token em claro NUNCA é persistido (vazar o banco não vaza acesso)
+	var guardados []string
+	rows, err := a.DB.DB().Query(`SELECT identificador FROM dispositivos_autorizados WHERE tipo='device_token'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var s string
+		_ = rows.Scan(&s)
+		guardados = append(guardados, s)
+	}
+	for _, s := range guardados {
+		if s == "dev-teste-uuid-1234" {
+			t.Fatalf("token em claro persistido no banco")
+		}
+	}
+	if len(guardados) == 0 {
+		t.Fatalf("nenhum device_token gravado")
 	}
 	hash := a.hashSerial("SERIAL-FAKE-001")
 	ok, _ = a.DB.IsDispositivoAutorizado(hash, "serial_hash")
@@ -231,7 +319,7 @@ func TestGovernanca_Registrar_Listar(t *testing.T) {
 
 	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/api/governanca/registrar", bytes.NewReader(b))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Forwarded-For", "8.8.8.8")
+	req.Header.Set("CF-Connecting-IP", "8.8.8.8")
 	resp2 := doReq(t, req)
 	resp2.Body.Close()
 	if resp2.StatusCode != http.StatusForbidden {
@@ -239,7 +327,7 @@ func TestGovernanca_Registrar_Listar(t *testing.T) {
 	}
 
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/governanca/dispositivos", nil)
-	req.Header.Set("X-Forwarded-For", "10.0.0.1")
+	req.Header.Set("CF-Connecting-IP", "10.0.0.1")
 	req.AddCookie(&http.Cookie{Name: "ana_session", Value: cookie})
 	resp3 := doReq(t, req)
 	defer resp3.Body.Close()
@@ -276,7 +364,7 @@ func TestGovernanca_DevPermissivo(t *testing.T) {
 
 	cookie := testLogin(t, ts)
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/artigos", nil)
-	req.Header.Set("X-Forwarded-For", "9.9.9.9")
+	req.Header.Set("CF-Connecting-IP", "9.9.9.9")
 	req.AddCookie(&http.Cookie{Name: "ana_session", Value: cookie})
 	resp := doReq(t, req)
 	resp.Body.Close()
@@ -286,7 +374,7 @@ func TestGovernanca_DevPermissivo(t *testing.T) {
 	_ = os.Setenv("GOVERNANCE_ENFORCE", "")
 	_ = os.Setenv("BIND_ADDR", "127.0.0.1")
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/artigos", nil)
-	req.Header.Set("X-Forwarded-For", "9.9.9.9")
+	req.Header.Set("CF-Connecting-IP", "9.9.9.9")
 	req.AddCookie(&http.Cookie{Name: "ana_session", Value: cookie})
 	resp2 := doReq(t, req)
 	resp2.Body.Close()
@@ -313,7 +401,7 @@ func TestGovernanca_CIDR(t *testing.T) {
 	cookie := testLogin(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/artigos", nil)
-	req.Header.Set("X-Forwarded-For", "192.168.0.55")
+	req.Header.Set("CF-Connecting-IP", "192.168.0.55")
 	req.AddCookie(&http.Cookie{Name: "ana_session", Value: cookie})
 	resp := doReq(t, req)
 	resp.Body.Close()
@@ -321,7 +409,7 @@ func TestGovernanca_CIDR(t *testing.T) {
 		t.Fatalf("cidr permitido deveria 200 veio %d", resp.StatusCode)
 	}
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/artigos", nil)
-	req.Header.Set("X-Forwarded-For", "192.168.1.55")
+	req.Header.Set("CF-Connecting-IP", "192.168.1.55")
 	req.AddCookie(&http.Cookie{Name: "ana_session", Value: cookie})
 	resp2 := doReq(t, req)
 	resp2.Body.Close()

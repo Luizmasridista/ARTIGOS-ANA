@@ -88,6 +88,13 @@ func New(dataDir, popplerDir, dbDSN, wwwDir string) (*App, error) {
 	}
 	a.jobSem = make(chan struct{}, jobConc)
 	a.workerStop = make(chan struct{})
+	// Recupera jobs que ficaram 'running' por queda/restart (Render free dorme):
+	// voltam para 'pending' para o worker retomar (ex: upload interrompido).
+	if res, err := st.DB().Exec(`UPDATE jobs SET status='pending', updated_at=now() WHERE status='running'`); err != nil {
+		log.Printf("aviso: falha ao recuperar jobs running: %v", err)
+	} else if n, _ := res.RowsAffected(); n > 0 {
+		log.Printf("jobs recuperados para pending: %d", n)
+	}
 	go a.jobWorkerLoop()
 	return a, nil
 }
@@ -148,6 +155,16 @@ func (a *App) processJob(j *store.Job) {
 	switch j.Tipo {
 	case "noop", "teste", "":
 		_ = a.DB.CompleteJob(j.ID, jsonRaw(`{"ok":true}`))
+	case "processar_pdf":
+		if err := a.processarPDFJob(j); err != nil {
+			_ = a.DB.FailJob(j.ID, err.Error())
+		} else {
+			var in struct {
+				ArtigoID int64 `json:"artigo_id"`
+			}
+			_ = json.Unmarshal(j.Payload, &in)
+			_ = a.DB.CompleteJob(j.ID, jsonRaw(fmt.Sprintf(`{"ok":true,"artigo_id":%d}`, in.ArtigoID)))
+		}
 	default:
 		// tipos não suportados nao devem ser marcados como sucesso falso
 		_ = a.DB.FailJob(j.ID, "tipo não suportado: "+j.Tipo)

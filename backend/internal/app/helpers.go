@@ -225,13 +225,20 @@ func securityHeaders(next http.Handler) http.Handler {
 }
 
 func clientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		parts := strings.Split(xff, ",")
-		if len(parts) > 0 {
-			p := strings.TrimSpace(parts[0])
-			if p != "" {
-				return p
-			}
+	// Precedencia anti-spoof (túnel e Render passam pela Cloudflare):
+	// 1) CF-Connecting-IP — a edge sobrescreve, o cliente não controla;
+	// 2) True-Client-IP — proxies que sobrescrevem;
+	// 3) RemoteAddr — conexão direta.
+	// X-Forwarded-For NUNCA é confiável para decisão de acesso: o cliente
+	// controla o início da lista e forjava qualquer IP da allowlist (ver ADR-008).
+	if v := strings.TrimSpace(r.Header.Get("CF-Connecting-IP")); v != "" {
+		if ip := firstIPField(v); ip != "" {
+			return ip
+		}
+	}
+	if v := strings.TrimSpace(r.Header.Get("True-Client-IP")); v != "" {
+		if ip := firstIPField(v); ip != "" {
+			return ip
 		}
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
@@ -239,6 +246,31 @@ func clientIP(r *http.Request) string {
 		return r.RemoteAddr
 	}
 	return host
+}
+
+func firstIPField(v string) string {
+	if i := strings.Index(v, ","); i >= 0 {
+		v = v[:i]
+	}
+	return strings.TrimSpace(v)
+}
+
+// isDirectLoopback diz se a requisição veio do próprio PC sem proxy no caminho
+// (Electron em http://127.0.0.1:8734). Usado só em cerimônias sensíveis
+// (criar a senha inicial). Com cabeçalho de proxy presente, não é direto.
+func isDirectLoopback(r *http.Request) bool {
+	if strings.TrimSpace(r.Header.Get("CF-Connecting-IP")) != "" ||
+		strings.TrimSpace(r.Header.Get("True-Client-IP")) != "" {
+		return false
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+	if ip := net.ParseIP(strings.TrimSpace(host)); ip != nil {
+		return ip.IsLoopback()
+	}
+	return false
 }
 
 // --- isolamento multiusuario: validacao central de posse ---

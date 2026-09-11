@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"artigos-ana/backend/internal/store"
 )
@@ -107,12 +108,17 @@ func wipeDB(t *testing.T) {
 
 var testAuthCache = map[string]string{}
 
+// testSenha é a senha usada nos logins de teste. Como o wipeDB não apaga
+// usuarios, a senha registrada persiste entre servidores de teste — usar
+// sempre o mesmo valor mantém tudo idempotente.
+const testSenha = "teste-senha-123"
+
 func testLogin(t *testing.T, ts *httptest.Server) string {
 	t.Helper()
 	if v, ok := testAuthCache[ts.URL]; ok {
 		return v
 	}
-	body, _ := json.Marshal(map[string]string{"nome": "Ana Bagatinii"})
+	body, _ := json.Marshal(map[string]string{"nome": "Ana Bagatinii", "senha": testSenha})
 	req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/auth/login", bytes.NewReader(body))
 	if err != nil {
 		t.Fatal(err)
@@ -250,7 +256,57 @@ func uploadPDF(t *testing.T, ts *httptest.Server, titulo string) map[string]any 
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatal(err)
 	}
+	// upload agora é assíncrono: espera o worker processar e devolve estado final
+	if jobID, ok := out["job_id"].(float64); ok && jobID > 0 {
+		aguardarJobConcluido(t, ts, int64(jobID))
+		artID := int64(out["id"].(float64))
+		req2, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/api/artigos/%d", ts.URL, artID), nil)
+		addAuth(t, req2, ts)
+		resp2, err := http.DefaultClient.Do(req2)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp2.Body.Close()
+		var detalhe struct {
+			Titulo  string           `json:"titulo"`
+			Paginas []map[string]any `json:"paginas"`
+		}
+		if err := json.NewDecoder(resp2.Body).Decode(&detalhe); err != nil {
+			t.Fatal(err)
+		}
+		out["titulo"] = detalhe.Titulo
+		out["num_paginas"] = float64(len(detalhe.Paginas))
+	}
 	return out
+}
+
+// aguardarJobConcluido espera o worker do servidor de teste concluir o job.
+func aguardarJobConcluido(t *testing.T, ts *httptest.Server, jobID int64) {
+	t.Helper()
+	cookie := testLogin(t, ts)
+	limite := time.Now().Add(180 * time.Second)
+	for time.Now().Before(limite) {
+		req, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/api/jobs/%d", ts.URL, jobID), nil)
+		req.AddCookie(&http.Cookie{Name: "ana_session", Value: cookie})
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var job struct {
+			Status string `json:"status"`
+			Error  string `json:"error"`
+		}
+		_ = json.NewDecoder(resp.Body).Decode(&job)
+		resp.Body.Close()
+		switch job.Status {
+		case "done":
+			return
+		case "failed":
+			t.Fatalf("job %d falhou: %s", jobID, job.Error)
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	t.Fatalf("job %d não concluiu", jobID)
 }
 
 func postJSON(t *testing.T, url string, v any) *http.Response {
