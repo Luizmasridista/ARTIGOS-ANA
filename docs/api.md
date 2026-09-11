@@ -21,19 +21,22 @@ ana_session=<header.payload.signature>; Path=/; HttpOnly; Secure; SameSite=Stric
   - `200 { "ok": true }` + `Set-Cookie: ana_session=...` (login válido, zera contador do IP)
   - `401 { "erro": "credenciais inválidas" }` (sem Set-Cookie)
   - `423 { "erro": "muitas tentativas", "retryAfter": 900 }` + `Retry-After: 900` (5 falhas em 60s do mesmo IP → bloqueio 15min)
+  - `403 { "erro": "conta sem senha: crie a senha no PC (http://127.0.0.1:8734)" }` conta ainda sem senha e fora do PC direto (cerimonia de criacao: so o PC cria a senha inicial)
+  - `400 { "erro": "defina uma senha de ao menos 4 caracteres no primeiro acesso" }` senha curta na criacao
   - `400 { "erro": "nome e senha obrigatórios" }` se body vazio
 - `POST /api/auth/logout` → `204` + `Set-Cookie: ana_session=; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT` (limpa cookie; idempotente)
 - `GET /api/auth/me` → `200 { "id": 1, "nome": "Ana Bagatinii" }` se cookie válido, senão `401 { "erro": "não autenticado" }` (expirado, ausente ou assinatura inválida → frontend redireciona para `Home` em `/`)
 
 ### Rate limit e auditoria
 
-- Chave por IP (`X-Forwarded-For` primeiro IP ou `RemoteAddr`). 5 tentativas falhas em janela de 60s → 6ª retorna `423` e grava `login_tentativas(ip, tentativas, primeira_tentativa, bloqueado_ate)` com `bloqueado_ate = now+15min`. Em memória `sync.Map` para checagem rápida, PG para persistir após restart. `Retry-After` em segundos.
+- Chave por IP (`CF-Connecting-IP`, `True-Client-IP` ou `RemoteAddr` — nunca `X-Forwarded-For`, forjável pelo cliente). 5 tentativas falhas em janela de 60s → 6ª retorna `423` e grava `login_tentativas(ip, tentativas, primeira_tentativa, bloqueado_ate)` com `bloqueado_ate = now+15min`. Em memória `sync.Map` para checagem rápida, PG para persistir após restart. `Retry-After` em segundos.
 
 ### Exigência de sessão nas rotas existentes
 
 Sem cookie válido → `401 { "erro": "não autenticado" }`:
 
 - `GET /api/artigos`, `POST /api/artigos`, `GET /api/artigos/{id}`, `DELETE /api/artigos/{id}`
+- `POST /api/artigos` (multipart `file`) é assíncrono: responde `201 {id, titulo, num_paginas: 0, status: "processando", job_id}` rápido e o worker processa as páginas (job `processar_pdf`, `GET /api/jobs/{id}`). Título: `titulo` explícito vence; senão extrai o título do paper da 1ª página; senão nome do arquivo.
 - `GET /api/artigos/{id}/paginas/{numero}/imagem|/camada`
 - `GET|POST /api/artigos/{id}/marcacoes`, `PATCH|DELETE /api/artigos/{id}/marcacoes/{id}`
 - `GET|POST /api/artigos/{id}/notas`, `PATCH|DELETE /api/artigos/{id}/notas/{id}`

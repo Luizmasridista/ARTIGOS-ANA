@@ -4,7 +4,7 @@ Status: aceito | Data: 2026-08-31 | Autor: backend
 
 ## Contexto
 
-Artigos Ana deve rodar apenas nos dispositivos autorizados: PC LENOVO `PE0***MM` (IP público atual `189.6.xxx.xxx`, locais `192.168.0.94/69`) e iPad `C97***66Y`, mesmo quando exposto na WEB via Render `https://artigos-ana.onrender.com` (Neon Postgres). IP é dinâmico, então allowlist precisa ser atualizável sem redeploy. iPad navegador não expõe serial via JS, precisa alternativa via token `X-Device-Id` gerado em `offline/sync.ts:getOrCreateDeviceId` + confirmação manual de serial. Render Free envia IP real via `X-Forwarded-For` (proxy), fallback `RemoteAddr`. Healthchecks `/health` e `/api/health` precisam continuar públicos.
+Artigos Ana deve rodar apenas nos dispositivos autorizados: PC LENOVO `PE0***MM` (IP público atual `189.6.xxx.xxx`, locais `192.168.0.94/69`) e iPad `C97***66Y`, mesmo quando exposto na WEB via Render `https://artigos-ana.onrender.com` (Neon Postgres). IP é dinâmico, então allowlist precisa ser atualizável sem redeploy. iPad navegador não expõe serial via JS, precisa alternativa via token `X-Device-Id` gerado em `offline/sync.ts:getOrCreateDeviceId` + confirmação manual de serial. Render Free envia IP real via `CF-Connecting-IP` (Cloudflare), fallback `RemoteAddr`. Healthchecks `/health` e `/api/health` precisam continuar públicos.
 
 ## Decisão
 
@@ -17,7 +17,7 @@ Artigos Ana deve rodar apenas nos dispositivos autorizados: PC LENOVO `PE0***MM`
 ### Middleware `governancaMiddleware` (app/governanca.go)
 - Bypass: `GET /health`, `GET /api/health` e `OPTIONS` (preflight) sempre passam.
 - Enforce: `GOVERNANCE_ENFORCE=1|true` força; `=0|false` desliga; se vazio, auto `BIND_ADDR=0.0.0.0` => liga, caso contrário desliga (fallback dev não trava, testes httptest passam).
-- Extração IP: `X-Forwarded-For` primeiro IP, fallback `r.RemoteAddr` normalizado (remove porta).
+- Extração IP: `CF-Connecting-IP` (Cloudflare sobrescreve na edge), fallback `True-Client-IP`, senão `r.RemoteAddr` normalizado (remove porta). `X-Forwarded-For` NUNCA é usado para decisão (cliente forja o início da lista).
 - Extração device: headers `X-Device-Id` / `X-Device-Token` (também `X-Device-Serial-Hash` para Electron).
 - Allowlists:
   - Env `ALLOWED_IPS` (vírgula, suporta CIDR `192.168.0.0/24` e IP exato).
@@ -65,5 +65,5 @@ Artigos Ana deve rodar apenas nos dispositivos autorizados: PC LENOVO `PE0***MM`
 - `go vet ./...` ok
 - `go test ./...` ok (skip DB quando sem Postgres)
 - `curl /health 200` sem header autorizado mesmo com `GOVERNANCE_ENFORCE=1`
-- `curl /api/artigos 403` sem IP/device autorizado em produção, `200` com `X-Forwarded-For: 189.6.213.149` ou `X-Device-Id` registrado
+- `curl /api/artigos 403` sem IP/device autorizado em produção, `200` com `CF-Connecting-IP: 189.6.213.149` ou `X-Device-Id` registrado
 - `POST /api/governanca/registrar` exige auth (401 sem cookie) e grava hashes sem logar serial
