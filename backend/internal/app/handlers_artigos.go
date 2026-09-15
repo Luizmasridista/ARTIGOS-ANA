@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -17,7 +18,156 @@ import (
 	"artigos-ana/backend/internal/store"
 )
 
-const maxUploadBytes = 50 << 20
+const maxUploadBytes = 130 << 20
+
+const maxTituloUploadBytes = 64 << 10
+
+var (
+	errUploadSemPDF      = errors.New("nenhuma parte PDF encontrada")
+	errUploadVazio       = errors.New("parte PDF vazia")
+	errUploadPDFInvalido = errors.New("arquivo não é um PDF")
+	errUploadMuitoGrande = errors.New("arquivo muito grande")
+	errTituloMuitoLongo  = errors.New("título muito longo")
+)
+
+// uploadPDFPart é a única representação que o handler precisa do multipart.
+// Não obriga o cliente a chamar a parte de "file": alguns navegadores móveis
+// enviam o PDF como um campo sem filename.
+type uploadPDFPart struct {
+	tmpPath     string
+	filename    string
+	size        int64
+	contentType string
+	titulo      string
+}
+
+// uploadPDFPartFromRequest percorre o multipart sem chamar ParseMultipartForm.
+// Assim, PDFs sem filename não viram Value em memória e continuam sujeitos ao
+// limite de 130 MB. A primeira parte com assinatura PDF é armazenada em
+// arquivo temporário; campos auxiliares nunca são aceitos como arquivo.
+func (a *App) uploadPDFPartFromRequest(r *http.Request) (*uploadPDFPart, error) {
+	reader, err := r.MultipartReader()
+	if err != nil {
+		return nil, err
+	}
+	var selected *uploadPDFPart
+	var titulo string
+	tituloLido := false
+	cleanup := func() {
+		if selected != nil && selected.tmpPath != "" {
+			_ = os.Remove(selected.tmpPath)
+		}
+	}
+	for {
+		part, err := reader.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			cleanup()
+			return nil, err
+		}
+		name := part.FormName()
+		filename := part.FileName()
+		contentType := part.Header.Get("Content-Type")
+		if name == "titulo" && !tituloLido {
+			data, readErr := io.ReadAll(io.LimitReader(part, maxTituloUploadBytes+1))
+			_ = part.Close()
+			if readErr != nil {
+				cleanup()
+				return nil, readErr
+			}
+			if len(data) > maxTituloUploadBytes {
+				cleanup()
+				return nil, errTituloMuitoLongo
+			}
+			titulo, tituloLido = string(data), true
+			continue
+		}
+		if selected != nil {
+			_, readErr := io.Copy(io.Discard, part)
+			_ = part.Close()
+			if readErr != nil {
+				cleanup()
+				return nil, readErr
+			}
+			continue
+		}
+
+		// Todo campo não-título pode ser o PDF em clientes que omitem filename
+		// ou mudam o nome do campo. A assinatura, e não o rótulo, decide.
+		tmp, err := os.CreateTemp(a.tmpDir, "upload-*.pdf")
+		if err != nil {
+			_ = part.Close()
+			cleanup()
+			return nil, err
+		}
+		tmpPath := tmp.Name()
+		head := make([]byte, 5)
+		n, readErr := io.ReadFull(part, head)
+		if readErr != nil || n != len(head) || string(head) != "%PDF-" {
+			_ = tmp.Close()
+			_ = os.Remove(tmpPath)
+			_ = part.Close()
+			if n == 0 && (name == "file" || filename != "") {
+				cleanup()
+				return nil, errUploadVazio
+			}
+			if name == "file" {
+				cleanup()
+				return nil, errUploadPDFInvalido
+			}
+			continue
+		}
+		if _, err := tmp.Write(head); err != nil {
+			_ = tmp.Close()
+			_ = os.Remove(tmpPath)
+			_ = part.Close()
+			cleanup()
+			return nil, err
+		}
+		copied, copyErr := io.Copy(tmp, io.LimitReader(part, maxUploadBytes-int64(len(head))+1))
+		_ = part.Close()
+		size := int64(len(head)) + copied
+		if copyErr != nil || size > maxUploadBytes {
+			_ = tmp.Close()
+			_ = os.Remove(tmpPath)
+			cleanup()
+			if copyErr != nil {
+				var maxErr *http.MaxBytesError
+				if errors.As(copyErr, &maxErr) {
+					return nil, errUploadMuitoGrande
+				}
+				return nil, copyErr
+			}
+			return nil, errUploadMuitoGrande
+		}
+		if err := tmp.Close(); err != nil {
+			_ = os.Remove(tmpPath)
+			cleanup()
+			return nil, err
+		}
+		selected = &uploadPDFPart{
+			tmpPath:     tmpPath,
+			filename:    filename,
+			size:        size,
+			contentType: contentType,
+		}
+	}
+	if selected == nil {
+		return nil, errUploadSemPDF
+	}
+	selected.titulo = titulo
+	return selected, nil
+}
+
+func tituloDoNomePDF(filename string) string {
+	filename = filepath.Base(strings.TrimSpace(filename))
+	if strings.ToLower(filepath.Ext(filename)) != ".pdf" {
+		return ""
+	}
+	return strings.TrimSpace(strings.TrimSuffix(filename, filepath.Ext(filename)))
+}
 
 func (a *App) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "versao": "0.1.0"})
@@ -45,61 +195,50 @@ func (a *App) handleListArtigos(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleCreateArtigo(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes)
 	if r.ContentLength == 0 {
 		log.Printf("upload corpo vazio: content-type=%q (iPad/iCloud sem download?)", r.Header.Get("Content-Type"))
 		writeErro(w, http.StatusBadRequest, "arquivo vazio: aguarde o download no iCloud concluir e tente de novo")
 		return
 	}
-	if err := r.ParseMultipartForm(16 << 20); err != nil {
-		if strings.Contains(err.Error(), "request body too large") {
-			writeErro(w, http.StatusRequestEntityTooLarge, "arquivo muito grande (limite 50MB)")
-			return
-		}
-		log.Printf("upload sem campo file: content-type=%q content-length=%d err=%v", r.Header.Get("Content-Type"), r.ContentLength, err)
-		writeErro(w, http.StatusBadRequest, `campo "file" obrigatório`)
-		return
-	}
-	file, header, err := r.FormFile("file")
+	part, err := a.uploadPDFPartFromRequest(r)
 	if err != nil {
-		log.Printf("upload FormFile file erro: content-type=%q err=%v", r.Header.Get("Content-Type"), err)
-		writeErro(w, http.StatusBadRequest, `campo "file" obrigatório`)
+		log.Printf("upload sem parte PDF: content-type=%q err=%v", r.Header.Get("Content-Type"), err)
+		if errors.Is(err, errUploadMuitoGrande) || strings.Contains(err.Error(), "request body too large") {
+			writeErro(w, http.StatusRequestEntityTooLarge, "arquivo muito grande (limite 130MB)")
+		} else if errors.Is(err, errUploadVazio) {
+			writeErro(w, http.StatusBadRequest, "arquivo vazio: aguarde o download no iCloud concluir e tente de novo")
+		} else if errors.Is(err, errTituloMuitoLongo) {
+			writeErro(w, http.StatusBadRequest, "título muito longo (máx 300 caracteres)")
+		} else if errors.Is(err, errUploadPDFInvalido) {
+			writeErro(w, http.StatusBadRequest, "arquivo não é um PDF")
+		} else {
+			writeErro(w, http.StatusBadRequest, "nenhum PDF válido foi enviado")
+		}
 		return
 	}
-	defer file.Close()
-	if header.Size == 0 {
-		log.Printf("upload parte file vazia: filename=%q content-type=%q", header.Filename, header.Header.Get("Content-Type"))
-		writeErro(w, http.StatusBadRequest, "arquivo vazio: aguarde o download no iCloud concluir e tente de novo")
-		return
-	}
+	defer os.Remove(part.tmpPath)
 	// valida extensão e content-type
-	ct := header.Header.Get("Content-Type")
+	ct := part.contentType
 	if ct != "" && ct != "application/pdf" && ct != "application/octet-stream" && !strings.Contains(ct, "pdf") {
 		log.Printf("aviso: upload Content-Type inesperado %q", ct)
 	}
-	if ext := strings.ToLower(filepath.Ext(header.Filename)); ext != "" && ext != ".pdf" {
+	if ext := strings.ToLower(filepath.Ext(part.filename)); ext != "" && ext != ".pdf" {
 		writeErro(w, http.StatusBadRequest, "arquivo deve ter extensão .pdf")
 		return
 	}
-	if header.Size > maxUploadBytes {
-		writeErro(w, http.StatusRequestEntityTooLarge, "arquivo muito grande (limite 50MB)")
+	if part.size > maxUploadBytes {
+		writeErro(w, http.StatusRequestEntityTooLarge, "arquivo muito grande (limite 130MB)")
 		return
 	}
 
-	head := make([]byte, 5)
-	if _, err := io.ReadFull(file, head); err != nil || string(head) != "%PDF-" {
-		writeErro(w, http.StatusBadRequest, "arquivo não é um PDF")
-		return
-	}
-
-	titulo := strings.TrimSpace(r.FormValue("titulo"))
+	titulo := strings.TrimSpace(part.titulo)
 	if len([]rune(titulo)) > 300 {
 		writeErro(w, http.StatusBadRequest, "título muito longo (máx 300 caracteres)")
 		return
 	}
 	tituloProvisorio := false
 	if titulo == "" {
-		titulo = strings.TrimSuffix(header.Filename, filepath.Ext(header.Filename))
+		titulo = tituloDoNomePDF(part.filename)
 		tituloProvisorio = true
 	}
 	if titulo == "" {
@@ -115,20 +254,6 @@ func (a *App) handleCreateArtigo(w http.ResponseWriter, r *http.Request) {
 		tituloProvisorio = true
 	}
 
-	tmp, err := os.CreateTemp(a.tmpDir, "upload-*.pdf")
-	if err != nil {
-		writeErro(w, http.StatusInternalServerError, "falha ao gravar o upload")
-		return
-	}
-	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath)
-	if _, err := io.Copy(tmp, io.MultiReader(strings.NewReader(string(head)), file)); err != nil {
-		tmp.Close()
-		writeErro(w, http.StatusInternalServerError, "falha ao gravar o upload")
-		return
-	}
-	tmp.Close()
-
 	uid, ok := getUsuarioID(r)
 	if !ok || uid == 0 {
 		writeErro(w, http.StatusUnauthorized, "não autenticado")
@@ -141,7 +266,7 @@ func (a *App) handleCreateArtigo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	finalPDF := a.pdfPath(id)
-	if err := os.Rename(tmpPath, finalPDF); err != nil {
+	if err := os.Rename(part.tmpPath, finalPDF); err != nil {
 		a.DB.DeleteArtigo(id)
 		writeErro(w, http.StatusInternalServerError, "falha ao gravar o PDF")
 		return

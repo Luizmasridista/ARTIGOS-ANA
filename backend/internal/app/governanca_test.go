@@ -117,6 +117,50 @@ func TestGovernanca_BloqueioEAllowIP(t *testing.T) {
 	}
 }
 
+// Uma conta sem senha só pode concluir o primeiro acesso se a governança já
+// tiver autorizado a origem. Isto permite o uso no site publicado sem abrir
+// cadastro público para IPs ou dispositivos fora da allowlist.
+func TestGovernanca_PrimeiraSenhaRemotaExigeOrigemAutorizada(t *testing.T) {
+	origEnforce := os.Getenv("GOVERNANCE_ENFORCE")
+	origBind := os.Getenv("BIND_ADDR")
+	origIPs := os.Getenv("ALLOWED_IPS")
+	defer func() {
+		_ = os.Setenv("GOVERNANCE_ENFORCE", origEnforce)
+		_ = os.Setenv("BIND_ADDR", origBind)
+		_ = os.Setenv("ALLOWED_IPS", origIPs)
+	}()
+	_ = os.Setenv("GOVERNANCE_ENFORCE", "1")
+	_ = os.Setenv("BIND_ADDR", "0.0.0.0")
+	_ = os.Setenv("ALLOWED_IPS", "203.0.113.7")
+
+	ts, a := newTestServer(t)
+	luiz, err := a.DB.GetUsuarioByNome("Luiz")
+	if err != nil || luiz == nil {
+		t.Fatalf("seed Luiz ausente: %v", err)
+	}
+	if err := a.DB.SetUsuarioSenha(luiz.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = a.DB.SetUsuarioSenha(luiz.ID, "") }()
+
+	postLogin := func(ip string) int {
+		body := []byte(`{"nome":"Luiz","senha":"senha-inicial-remota"}`)
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/auth/login", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("CF-Connecting-IP", ip)
+		resp := doReq(t, req)
+		defer resp.Body.Close()
+		return resp.StatusCode
+	}
+
+	if got := postLogin("203.0.113.8"); got != http.StatusForbidden {
+		t.Fatalf("origem fora da allowlist deveria 403, veio %d", got)
+	}
+	if got := postLogin("203.0.113.7"); got != http.StatusOK {
+		t.Fatalf("origem autorizada deveria concluir a primeira senha, veio %d", got)
+	}
+}
+
 func TestGovernanca_XFF_Spoof_Ignorado(t *testing.T) {
 	// X-Forwarded-For é controlado pelo cliente: forjar o IP da allowlist
 	// NÃO pode liberar. Só CF-Connecting-IP (edge) vale.

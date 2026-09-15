@@ -60,8 +60,10 @@ func (a *App) generalRateLimitMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-const maxJSONBytes = 1 << 20       // 1 MB para JSON
-const maxUploadBytesNew = 50 << 20 // 50 MB para upload PDF (reduzido de 512 MB)
+const maxJSONBytes = 1 << 20 // 1 MB para JSON
+// Inclui 2 MB para a estrutura multipart, de modo que um PDF de 130 MB seja
+// aceito sem abrir margem para um corpo ilimitado.
+const maxUploadBytesNew = maxUploadBytes + (2 << 20)
 
 func bodyLimitMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

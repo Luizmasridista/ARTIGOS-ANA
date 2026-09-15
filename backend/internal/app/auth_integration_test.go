@@ -400,19 +400,32 @@ func TestAuth_Senha_Enroll_Verify_Remoto(t *testing.T) {
 		return rr.Code, rr.Body.Bytes()
 	}
 
-	// 1) conta sem senha, fora do PC: nega (ninguém sequestra a conta)
-	code, raw := postLogin(map[string]string{"nome": "Luiz", "senha": "qualquer"}, "203.0.113.9:4567", nil)
-	if code != http.StatusForbidden {
-		t.Fatalf("enroll remoto deveria 403 veio %d corpo %s", code, raw)
+	// 1) no site publicado, usuário já autorizado pela governança pode criar
+	// a senha inicial sem precisar de acesso ao localhost.
+	code, raw := postLogin(map[string]string{"nome": "Luiz", "senha": "nova-senha-luiz"}, "203.0.113.9:4567", nil)
+	if code != http.StatusOK {
+		t.Fatalf("enroll remoto deveria 200 veio %d corpo %s", code, raw)
+	}
+	if strings.Contains(string(raw), "senha_hash") {
+		t.Fatalf("login vazou hash %s", raw)
 	}
 
-	// 2) no PC (loopback httptest), primeira vez com senha curta: 400
+	// 2) com senha já definida, uma senha incorreta continua falhando.
+	code, _ = postLogin(map[string]string{"nome": "Luiz", "senha": "abc"}, "", nil)
+	if code != http.StatusUnauthorized {
+		t.Fatalf("senha incorreta deveria 401 veio %d", code)
+	}
+
+	// 3) uma nova conta sem senha ainda exige mínimo seguro.
+	if err := a.DB.SetUsuarioSenha(luiz.ID, ""); err != nil {
+		t.Fatal(err)
+	}
 	code, _ = postLogin(map[string]string{"nome": "Luiz", "senha": "abc"}, "", nil)
 	if code != http.StatusBadRequest {
 		t.Fatalf("senha curta deveria 400 veio %d", code)
 	}
 
-	// 3) no PC com senha válida: cria e entra 200
+	// 4) criação remota com senha válida persiste o bcrypt.
 	code, raw = postLogin(map[string]string{"nome": "Luiz", "senha": "nova-senha-luiz"}, "", nil)
 	if code != http.StatusOK {
 		t.Fatalf("enroll deveria 200 veio %d corpo %s", code, raw)
@@ -421,19 +434,19 @@ func TestAuth_Senha_Enroll_Verify_Remoto(t *testing.T) {
 		t.Fatalf("login vazou hash %s", raw)
 	}
 
-	// 4) senha errada: 401
+	// 5) senha errada: 401
 	code, _ = postLogin(map[string]string{"nome": "Luiz", "senha": "errada"}, "", nil)
 	if code != http.StatusUnauthorized {
 		t.Fatalf("senha errada deveria 401 veio %d", code)
 	}
 
-	// 5) senha certa: 200 (e reseta rate limit)
+	// 6) senha certa: 200 (e reseta rate limit)
 	code, _ = postLogin(map[string]string{"nome": "Luiz", "senha": "nova-senha-luiz"}, "", nil)
 	if code != http.StatusOK {
 		t.Fatalf("senha certa deveria 200 veio %d", code)
 	}
 
-	// 6) hash bcrypt persistido, nunca em claro
+	// 7) hash bcrypt persistido, nunca em claro
 	u2, _ := a.DB.GetUsuarioByNome("Luiz")
 	if u2 == nil || u2.SenhaHash == "" || u2.SenhaHash == "nova-senha-luiz" {
 		t.Fatalf("hash bcrypt deveria estar gravado")
