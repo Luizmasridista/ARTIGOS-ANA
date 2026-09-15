@@ -30,8 +30,8 @@ Status: implementado e testado.
 - JWT HS256 com `hmac.Equal` e verificação de `alg` e `exp` (`verifyJWT` já ok).
 
 ### 5. Upload e body limits (`handlers_artigos.go:19` / `middleware.go:18`)
-- `maxUploadBytes` reduzido de `512MB` para `50MB` + checagem `header.Size`, extensão `.pdf` obrigatória e `Content-Type` validado.
-- Middleware `bodyLimitMiddleware` impõe `1MB` para JSON (`POST/PATCH/PUT`) e `50MB` para `multipart`. Resposta `413` quando excede.
+- Upload multipart em streaming com teto de PDF de `130MB` (mais envelope multipart controlado), assinatura `%PDF-` obrigatória, filename opcional e fallback de título seguro. O `Content-Type` é apenas informativo; a assinatura decide se o arquivo é PDF.
+- Middleware `bodyLimitMiddleware` impõe `1MB` para JSON (`POST/PATCH/PUT`) e `132MB` para multipart (PDF de 130 MB mais envelope). Resposta `413` quando excede.
 - Validação de título: máx `300` runes, sanitiza `\n`/`\r`.
 - Handlers JSON tratam `request body too large` → `413` (antes virava `400`).
 
