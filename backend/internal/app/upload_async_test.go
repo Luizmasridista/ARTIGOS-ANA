@@ -3,14 +3,80 @@ package app
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+// byteRepeater produz um corpo grande sem reservar o PDF inteiro na memória.
+// É usado para provar o limite de upload pelo mesmo caminho de streaming do
+// handler, sem transformar o teste em um consumo de centenas de MB de RAM.
+type byteRepeater struct {
+	remaining int64
+	value     byte
+}
+
+func (r *byteRepeater) Read(p []byte) (int, error) {
+	if r.remaining == 0 {
+		return 0, io.EOF
+	}
+	n := int64(len(p))
+	if n > r.remaining {
+		n = r.remaining
+	}
+	for i := range p[:n] {
+		p[i] = r.value
+	}
+	r.remaining -= n
+	return int(n), nil
+}
+
+func streamingPDFRequest(pdfSize int64) *http.Request {
+	const boundary = "artigos-ana-upload-test"
+	if pdfSize < 5 {
+		panic("pdfSize precisa incluir a assinatura PDF")
+	}
+	header := fmt.Sprintf("--%s\r\nContent-Disposition: form-data; name=\"documento\"\r\nContent-Type: application/pdf\r\n\r\n", boundary)
+	footer := fmt.Sprintf("\r\n--%s--\r\n", boundary)
+	body := io.NopCloser(io.MultiReader(
+		strings.NewReader(header),
+		strings.NewReader("%PDF-"),
+		io.LimitReader(&byteRepeater{remaining: pdfSize - 5, value: 'P'}, pdfSize-5),
+		strings.NewReader(footer),
+	))
+	req := &http.Request{Header: make(http.Header), Body: body}
+	req.Header.Set("Content-Type", "multipart/form-data; boundary="+boundary)
+	return req
+}
+
+func multipartFileRequest(t *testing.T, filename string, content []byte) *http.Request {
+	t.Helper()
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	part, err := mw.CreateFormFile("file", filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write(content); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	req, err := http.NewRequest(http.MethodPost, "/api/artigos", &buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	return req
+}
 
 func postArtigoMultipart(t *testing.T, tsURL, cookie string, filename string, conteudo []byte) (int, map[string]any) {
 	t.Helper()
@@ -39,7 +105,8 @@ func postArtigoMultipart(t *testing.T, tsURL, cookie string, filename string, co
 	return resp.StatusCode, out
 }
 
-func TestUploadAsync_RetornaJob(t *testing.T) {	_ = os.Setenv("ALLOW_INSECURE_COOKIE", "1")
+func TestUploadAsync_RetornaJob(t *testing.T) {
+	_ = os.Setenv("ALLOW_INSECURE_COOKIE", "1")
 	ts, a := newTestServer(t)
 	cookie := testLogin(t, ts)
 
@@ -269,5 +336,93 @@ func TestUpload_ParteVazia_MensagemClara(t *testing.T) {
 	}
 	if !strings.Contains(out["erro"], "iCloud") {
 		t.Fatalf("erro deveria orientar sobre iCloud veio %q", out["erro"])
+	}
+}
+
+func TestUpload_AceitaPDFEmParteAlternativaSemFilename(t *testing.T) {
+	_ = os.Setenv("ALLOW_INSECURE_COOKIE", "1")
+	ts, _ := newTestServer(t)
+	cookie := testLogin(t, ts)
+
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	// Alguns clientes móveis enviam o PDF como campo sem filename. O servidor
+	// deve identificá-lo pela assinatura, não pelo nome rígido do campo.
+	h := make(textproto.MIMEHeader)
+	h.Set("Content-Disposition", `form-data; name="documento"`)
+	h.Set("Content-Type", "application/pdf")
+	part, err := mw.CreatePart(h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write([]byte("%PDF-1.4-conteudo")); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/artigos", &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.AddCookie(&http.Cookie{Name: "ana_session", Value: cookie})
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var out map[string]any
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("PDF em parte alternativa deveria 201, veio %d: %v", resp.StatusCode, out)
+	}
+	if out["titulo"] != "Artigo sem título" {
+		t.Fatalf("sem filename deveria usar título seguro, veio %q", out["titulo"])
+	}
+}
+
+func TestUploadMultipartStreaming_AceitaExatos130MB(t *testing.T) {
+	a := &App{tmpDir: t.TempDir()}
+	req := streamingPDFRequest(maxUploadBytes)
+	defer req.Body.Close()
+	part, err := a.uploadPDFPartFromRequest(req)
+	if err != nil {
+		t.Fatalf("PDF de exatamente 130 MB deveria ser aceito: %v", err)
+	}
+	defer os.Remove(part.tmpPath)
+	if part.size != maxUploadBytes {
+		t.Fatalf("tamanho persistido = %d, esperado %d", part.size, maxUploadBytes)
+	}
+	if part.filename != "" {
+		t.Fatalf("parte sem filename não deveria inventar nome: %q", part.filename)
+	}
+}
+
+func TestUploadMultipartStreaming_RejeitaAcimaDe130MBSemBuffer(t *testing.T) {
+	a := &App{tmpDir: t.TempDir()}
+	req := streamingPDFRequest(maxUploadBytes + 1)
+	defer req.Body.Close()
+	_, err := a.uploadPDFPartFromRequest(req)
+	if !errors.Is(err, errUploadMuitoGrande) {
+		t.Fatalf("PDF acima de 130 MB deveria falhar pelo limite, veio %v", err)
+	}
+}
+
+func TestUploadMultipartStreaming_RejeitaVazioENaoPDF(t *testing.T) {
+	a := &App{tmpDir: t.TempDir()}
+	for _, tc := range []struct {
+		name    string
+		content []byte
+		want    error
+	}{
+		{name: "vazio", want: errUploadVazio},
+		{name: "assinatura inválida", content: []byte("texto comum"), want: errUploadPDFInvalido},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := multipartFileRequest(t, "documento.pdf", tc.content)
+			defer req.Body.Close()
+			_, err := a.uploadPDFPartFromRequest(req)
+			if !errors.Is(err, tc.want) {
+				t.Fatalf("erro = %v, esperado %v", err, tc.want)
+			}
+		})
 	}
 }

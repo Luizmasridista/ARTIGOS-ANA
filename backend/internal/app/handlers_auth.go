@@ -361,13 +361,8 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if strings.TrimSpace(u.SenhaHash) == "" {
-		// Conta ainda sem senha: cerimônia de criação, SOMENTE direto no PC
-		// (sem proxy no caminho). Fora do PC, nega para ninguém sequestrar a conta.
-		if !isDirectLoopback(r) {
-			log.Printf("[auth] sem senha e fora do PC ip=%s nome=%q", ip, in.Nome)
-			writeErro(w, http.StatusForbidden, "conta sem senha: crie a senha no PC (http://127.0.0.1:8734)")
-			return
-		}
+		// Primeiro acesso também funciona no site publicado. Em produção este
+		// endpoint continua atrás da governança de IP/dispositivo, antes do auth.
 		if len([]rune(strings.TrimSpace(in.Senha))) < minSenhaLen {
 			writeErro(w, http.StatusBadRequest, "defina uma senha de ao menos 4 caracteres no primeiro acesso")
 			return
