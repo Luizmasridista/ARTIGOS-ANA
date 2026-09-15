@@ -22,7 +22,7 @@ Render Free tem disco efemero (apagado a cada restart/sleep 15min). Backend salv
 
 ## Consequencias
 
-- Upload 50MB cabe em BYTEA (Neon 10GB, ~200 PDFs grandes). Imagens ~300KB/pagina, 10 paginas ~3MB. Sem custo extra, sem credenciais R2.
+- Upload de até 130MB cabe em BYTEA, mas a capacidade prática depende do volume total no Neon e do uso de memória no Render ao persistir o arquivo. Imagens ~300KB/página, 10 páginas ~3MB. Sem custo extra, sem credenciais R2.
 - `go vet`/`go test` passam offline (sem DB, sync_unit). Upload local continua via disco; apos `rm data/pdfs` imagem ainda 200 via DB.
 - Tradeoff: BYTEA aumenta dump/backup e latencia vs object storage; aceitavel ate 10GB. Migracao futura para R2 e so trocar helpers (interface isolada).
 - Render sleep 15min nao perde dados; cold start reidrata do DB sob demanda.
