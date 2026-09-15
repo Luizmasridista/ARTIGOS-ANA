@@ -1,3 +1,5 @@
+import { baixarBlob } from './download'
+
 function apiBase(): string {
   try {
     if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
@@ -442,6 +444,11 @@ export const api = {
 
   exportar: (id: number) =>
     request<ExportResultado>(`/api/artigos/${id}/exportar`, { method: 'POST' }),
+
+  baixarExportacao: async (id: number, nomeSugerido?: string | null): Promise<string> => {
+    const blob = await fetchBlob(`/api/artigos/${id}/exportar`)
+    return baixarBlob(blob, nomeSugerido, `artigo-${id}`)
+  },
 
   listarHistorico: (id: number) =>
     request<HistoricoEvento[]>(`/api/artigos/${id}/historico`),

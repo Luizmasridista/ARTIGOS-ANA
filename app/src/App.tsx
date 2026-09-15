@@ -1016,6 +1016,9 @@ function Leitor({ artigo, onVoltar }: LeitorProps) {
     setExportEstado({ fase: 'exportando', resultado: null, erro: null })
     try {
       const resultado = await api.exportar(detalhe.id)
+      // No navegador não há caminho local para abrir: baixa o arquivo gerado.
+      // O helper usa nome seguro quando a resposta não trouxer nome/metadados.
+      if (!window.artigosAna) await api.baixarExportacao(detalhe.id, resultado.nome)
       setExportEstado({ fase: 'pronto', resultado, erro: null })
     } catch (e) {
       if (isNetworkErrorApp(e)) {
